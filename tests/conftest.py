@@ -137,7 +137,7 @@ def make_course(company_id, title, status="draft", mode="public"):
 
 @pytest.fixture
 def login(app):
-    def authenticate(user):
+    def authenticate(user, company_id=None):
         from backend.routes.site_auth import _serializer
 
         with app.test_request_context():
@@ -145,6 +145,13 @@ def login(app):
         client = app.test_client()
         assert client.get("/login/" + token).status_code == 302
         db.session.refresh(user)
+        if company_id is not None:
+            assert (
+                client.post(
+                    "/workspaces/select", data={"company_id": company_id}
+                ).status_code
+                == 302
+            )
         return client
 
     return authenticate

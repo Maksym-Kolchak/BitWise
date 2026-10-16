@@ -81,13 +81,14 @@
     <form method="post" action="{{ url_for('workspaces.select') }}" class="workspace-switch">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="workspace-select">{{ _("Working in") }}</label>
-      <select id="workspace-select" name="company_id">
+      <select id="workspace-select" name="company_id" data-workspace-select aria-describedby="workspace-help">
         <option value="" {{ 'selected' if not active_company }}>{{ _("Personal account") }}</option>
         {% for member in workspace_memberships %}
         <option value="{{ member.company_id }}" {{ 'selected' if active_company and active_company.id == member.company_id }}>{{ member.company.name }} — {{ _("Owner") if member.role == 'owner' else _("Editor") }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-outline btn-small" type="submit">{{ _("Switch") }}</button>
+      <noscript><button class="btn btn-outline btn-small" type="submit">{{ _("Open workspace") }}</button></noscript>
+      <span class="workspace-help muted small" id="workspace-help">{{ _("Choosing a workspace opens its dashboard immediately.") }}</span>
     </form>
     <a href="{{ url_for('workspaces.index') }}">{{ _("Workspaces and invitations") }}</a>
   </div>

@@ -17,7 +17,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 from backend.access import require_company_owner, owns_company
 from backend.email import external_url, send_email
-from backend.i18n import _
+from backend.i18n import _, safe_next_url
 from backend.routes.site_auth import EMAIL_RE
 from core.clock import utc_now
 from database import db
@@ -60,7 +60,8 @@ def select():
         ).first():
             abort(403)
         session["active_company_id"] = company_id
-    return redirect(url_for("main.account"))
+    destination = safe_next_url(request.form.get("next"), url_for("main.account"))
+    return redirect(destination)
 
 
 @bp.route("/companies/new", methods=["GET", "POST"])

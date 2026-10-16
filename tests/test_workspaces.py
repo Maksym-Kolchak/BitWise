@@ -29,7 +29,7 @@ def invitation(data, **changes):
 
 
 def test_one_login_multiple_companies_and_learning(data, login):
-    client = login(data["editor"])
+    client = login(data["editor"], company_id=10)
     for company in (data["alpha"], data["beta"]):
         assert (
             client.post(
@@ -90,7 +90,7 @@ def test_invitation_requires_explicit_response(data, login, action, status):
 
 def test_invitation_wrong_email(data, login):
     invite = invitation(data)
-    client = login(data["other"])
+    client = login(data["other"], company_id=20)
     assert client.get("/invitations/test-invitation").status_code == 403
     assert (
         client.post(
@@ -119,13 +119,13 @@ def test_expired_or_cancelled_invitation(data, login, changes):
 def test_cancel_invitation(data, login):
     invite = invitation(data)
     assert (
-        login(data["other"])
+        login(data["other"], company_id=20)
         .post(f"/companies/10/invitations/{invite.id}/cancel")
         .status_code
         == 403
     )
     assert (
-        login(data["owner"])
+        login(data["owner"], company_id=10)
         .post(f"/companies/10/invitations/{invite.id}/cancel")
         .status_code
         == 302
@@ -140,7 +140,7 @@ def test_invite_email_and_no_automatic_membership(data, login, monkeypatch):
         "backend.routes.workspaces.send_email",
         lambda *args: emails.append(args) or True,
     )
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     assert (
         client.post(
             "/companies/10/invitations", data={"email": " LEARNER@EXAMPLE.INVALID "}
@@ -153,8 +153,8 @@ def test_invite_email_and_no_automatic_membership(data, login, monkeypatch):
 
 
 def test_revocation_works_on_open_editor_session(data, login):
-    editor = login(data["editor"])
-    owner = login(data["owner"])
+    editor = login(data["editor"], company_id=10)
+    owner = login(data["owner"], company_id=10)
     course = data["assigned"]
     member = data["editor_membership"]
     assert editor.get(f"/course/{course.id}/builder").status_code == 200
@@ -176,9 +176,9 @@ def test_revocation_works_on_open_editor_session(data, login):
 
 def test_remove_member_clears_assignments(data, login):
     member = data["editor_membership"]
-    editor = login(data["editor"])
+    editor = login(data["editor"], company_id=10)
     assert (
-        login(data["owner"])
+        login(data["owner"], company_id=10)
         .post(f"/companies/10/members/{member.id}/remove")
         .status_code
         == 302
@@ -193,7 +193,7 @@ def test_cross_company_assignment_rejected(data, login):
         company_id=20, user_id=data["editor"].id
     ).first()
     assert (
-        login(data["owner"])
+        login(data["owner"], company_id=10)
         .post(
             f"/companies/10/courses/{data['assigned'].id}/editors/{foreign.id}",
             data={"action": "add"},
@@ -220,7 +220,7 @@ def test_company_creation_and_owner_cannot_be_removed(data, login):
 
 
 def test_account_deletion_requires_explicit_company_deletion(data, login):
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     client.post("/account/delete", data={"confirm_email": data["owner"].email})
     assert db.session.get(User, data["owner"].id)
     assert (

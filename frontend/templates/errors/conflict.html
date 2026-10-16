@@ -1,2 +1,5 @@
-{% extends 'base.html' %}
-{% block content %}<div class="container page narrow"><h1>{{ _('This action is not available') }}</h1><p>{{ message }}</p><a href="{{ url_for('main.account') }}">{{ _('My account') }}</a></div>{% endblock %}
+{% extends "errors/status_base.html" %}
+{% block title %}{{ _('This action is not available') }}{% endblock %}
+{% block status_heading %}{{ _('This action is not available') }}{% endblock %}
+{% block status_message %}{{ message }}{% endblock %}
+{% block status_actions %}<a class="btn btn-primary" href="{{ url_for('main.account') }}">{{ _('My account') }}</a>{% endblock %}

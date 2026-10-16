@@ -1,9 +1,4 @@
-{% extends "base.html" %}
+{% extends "errors/status_base.html" %}
 {% block title %}{{ _("Page not found") }}{% endblock %}
-{% block content %}
-  <section class="hero">
-    <h1>{{ _("404 · Page not found") }}</h1>
-    <p class="lead">{{ _("This page doesn't exist or the link is no longer valid.") }}</p>
-    <a class="btn btn-primary" href="{{ url_for('main.home') }}">{{ _("Go home") }}</a>
-  </section>
-{% endblock %}
+{% block status_heading %}{{ _("404 · Page not found") }}{% endblock %}
+{% block status_message %}{{ _("This page doesn't exist or the link is no longer valid.") }}{% endblock %}

@@ -66,7 +66,7 @@ def test_valid_login_returns_to_course(app, data):
 
 
 def test_private_headers(data, login):
-    response = login(data["editor"]).get("/workspaces")
+    response = login(data["editor"], company_id=10).get("/workspaces")
     assert response.headers["Cache-Control"] == "private, no-store"
     assert response.headers["Referrer-Policy"] == "same-origin"
 

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="container page status-page" aria-labelledby="status-title">
+  <div class="status-content">
+    <h1 id="status-title">{% block status_heading %}{% endblock %}</h1>
+    <p class="lead">{% block status_message %}{% endblock %}</p>
+    <div class="status-actions">
+      {% block status_actions %}<a class="btn btn-primary" href="{{ url_for('main.home') }}">{{ _("Go home") }}</a>{% endblock %}
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,28 @@
+Copy these paths from Bitwise-update to the project root, preserving paths.
+Review local changes first. All files in this update belong together.
+No .env, databases, uploads, run.py, core/config.py or site_auth.py included.
+
+ARCHITECTURE.md
+CHANGED-FILES.txt
+CHANGES-AND-LIMITS.md
+README.md
+START-HERE.md
+UI-PLAN.md
+UPDATE-FILES.txt
+UPDATE-INSTRUCTIONS.md
+backend/access.py
+backend/routes/workspaces.py
+frontend/static/css/style.css
+frontend/static/js/main.js
+frontend/templates/base.html
+frontend/templates/course.html
+frontend/templates/errors/403.html
+frontend/templates/errors/404.html
+frontend/templates/errors/conflict.html
+frontend/templates/errors/status_base.html
+tests/conftest.py
+tests/test_permissions.py
+tests/test_security.py
+tests/test_workspace_context.py
+tests/test_workspaces.py
+translations/ru/interface.json

@@ -13,3 +13,11 @@ Separate personal account, company settings, invitation inbox, and course assign
 No decorative graphics or animation; focus, labels, and reduced motion matter more.
 Review: information is specific to a course-authoring workflow, no generic dashboard
 widgets added. Reuse existing styles; add only responsive workspace controls.
+
+## Workspace context correction
+Keep the existing white/lime/purple palette and typography. Remove the redundant
+Switch button; use a labelled native select with an advance navigation hint and
+CSRF-protected POST on change. Preserve a no-JS submit fallback. Personal mode
+shows learner controls only, even on one's own course. Selected-company mode
+shows that company's author tools, plus a clear Take as a learner transition.
+Preview links never create enrollment or results. No new decorative UI.

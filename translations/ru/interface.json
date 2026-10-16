@@ -392,5 +392,7 @@
   "This course is not ready for learning. Please contact its owner.": "Курс ещё не готов к обучению. Обратитесь к владельцу.",
   "Do not change lesson or quiz structure after learning has started. Create a new course version.": "Нельзя менять структуру уроков и тестов после начала обучения. Создайте новую версию курса.",
   "A published lesson must retain text or video.": "В опубликованном уроке должен остаться текст или видео.",
-  "Visible in the catalog. Start after approval or with an invite link.": "Виден в каталоге. Обучение — после одобрения заявки или по ссылке-приглашению."
+  "Visible in the catalog. Start after approval or with an invite link.": "Виден в каталоге. Обучение — после одобрения заявки или по ссылке-приглашению.",
+  "Choosing a workspace opens its dashboard immediately.": "Выбор кабинета сразу открывает его главную страницу.",
+  "Take as a learner": "Пройти как ученик"
 }

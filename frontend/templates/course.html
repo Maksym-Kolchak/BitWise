@@ -61,7 +61,7 @@
 
         {% if can_manage %}
           <p class="side-label">{{ _("You own this course") if is_owner else _("Course editor") }}</p>
-          {% if course.status == 'draft' and is_owner %}
+          {% if course.status == 'draft' %}
             <p class="status-line"><span class="status-dot is-draft"></span>{{ _("Draft — only assigned authors can see it") }}</p>
             {% if is_owner %}
             <form method="post" action="{{ url_for('courses.publish', course_id=course.id) }}">
@@ -74,6 +74,14 @@
           {% endif %}
           <a class="btn btn-outline btn-block" href="{{ url_for('builder.script', course_id=course.id) }}">{{ _("Open builder") }}</a>
           <a class="btn btn-outline btn-block" href="{{ url_for('courses.edit', course_id=course.id) }}">{{ _("Edit details") }}</a>
+          {% if course.status == 'published' %}
+          <form method="post" action="{{ url_for('workspaces.select') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="company_id" value="">
+            <input type="hidden" name="next" value="{{ url_for('courses.view', course_id=course.id) }}">
+            <button type="submit" class="btn btn-primary btn-block">{{ _("Take as a learner") }}</button>
+          </form>
+          {% endif %}
 
           {% if invite_url %}
             <div class="invite-box">
@@ -152,7 +160,7 @@
       {% if lessons %}
         <ol class="lesson-list">
           {% for lesson in lessons %}
-            {% if is_owner %}
+            {% if can_manage %}
               {% set lesson_state = 'preview' %}
             {% elif enrollment and (enrollment.status == 'completed' or lesson.order < enrollment.current_lesson) %}
               {% set lesson_state = 'done' %}
@@ -163,7 +171,9 @@
             {% endif %}
 
             <li>
-              {% if lesson_state in ['done', 'current'] %}
+              {% if lesson_state == 'preview' %}
+                <a class="lesson-row is-preview" href="{{ url_for('courses.preview_lesson', course_id=course.id, lesson_id=lesson.id) }}">
+              {% elif lesson_state in ['done', 'current'] %}
                 <a class="lesson-row is-{{ lesson_state }}" href="{{ url_for('courses.lesson', course_id=course.id, n=lesson.order) }}">
               {% else %}
                 <div class="lesson-row is-{{ lesson_state }}">
@@ -173,10 +183,11 @@
                   <span class="lesson-state">
                     {% if lesson_state == 'done' %}{{ _("Passed") }}
                     {% elif lesson_state == 'current' %}{{ _("Up next") }}
+                    {% elif lesson_state == 'preview' %}{{ _("Preview") }}
                     {% elif lesson_state == 'locked' %}🔒
                     {% endif %}
                   </span>
-              {% if lesson_state in ['done', 'current'] %}</a>{% else %}</div>{% endif %}
+              {% if lesson_state in ['preview', 'done', 'current'] %}</a>{% else %}</div>{% endif %}
             </li>
           {% endfor %}
         </ol>

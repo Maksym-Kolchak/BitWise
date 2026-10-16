@@ -366,3 +366,16 @@ img, video { max-width: 100%; }
 @media(prefers-reduced-motion:reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
+
+/* Explain the automatic navigation before a user changes the workspace. */
+.workspace-help { flex-basis: 100%; }
+
+/* System pages share the site's container instead of touching the viewport. */
+.status-page { padding-top: 48px; }
+.status-content { max-width: 760px; min-width: 0; overflow-wrap: anywhere; }
+.status-content h1 { font-size: clamp(1.5rem, 3vw, 2.25rem); }
+.status-content .lead { margin: 16px 0 0; }
+.status-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+@media (max-width: 600px) {
+  .status-page { padding-top: 32px; }
+}

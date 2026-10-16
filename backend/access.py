@@ -1,6 +1,6 @@
 """Authorization shared by HTML, uploads, quizzes and AI endpoints."""
 
-from flask import abort
+from flask import abort, has_request_context, session
 from backend.i18n import _
 from flask_login import current_user
 from database import db
@@ -14,8 +14,20 @@ def membership_for(company_id, user=None):
     return Membership.query.filter_by(company_id=company_id, user_id=user.id).first()
 
 
+def active_membership_for(company_id, user=None):
+    """Management is available only inside the selected company workspace.
+
+    A membership alone must not grant author privileges in personal mode or
+    while another company is selected. Recheck membership on every request.
+    """
+    if not has_request_context() or session.get("active_company_id") != company_id:
+        return None
+    return membership_for(company_id, user)
+
+
 def owns_company(company_id, user=None):
-    membership = membership_for(company_id, user)
+    """Can act as this company's owner in the current workspace."""
+    membership = active_membership_for(company_id, user)
     return bool(
         membership
         and membership.role == "owner"
@@ -35,7 +47,7 @@ def require_company_owner(company_id=None):
 def can_edit_course(course, user=None):
     if owns_company(course.company_id, user):
         return True
-    membership = membership_for(course.company_id, user)
+    membership = active_membership_for(course.company_id, user)
     return bool(
         course.status == "draft"
         and membership

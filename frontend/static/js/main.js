@@ -235,3 +235,11 @@ document.addEventListener('click', async function (event) {
     }, 3000);
   }
 });
+
+// Selecting a workspace sends the existing CSRF-protected form immediately.
+const workspaceSelect = document.querySelector('[data-workspace-select]');
+if (workspaceSelect) {
+  workspaceSelect.addEventListener('change', function () {
+    workspaceSelect.form.requestSubmit();
+  });
+}

@@ -8,7 +8,7 @@ from backend.access import publication_errors
     "operation", ["builder", "edit", "lessons", "publish", "delete", "ai-suggestions"]
 )
 def test_unassigned_editor_denied(data, login, operation):
-    client = login(data["editor"])
+    client = login(data["editor"], company_id=10)
     cid = data["unassigned"].id
     response = (
         client.get(f"/course/{cid}/{operation}")
@@ -27,7 +27,7 @@ def test_published_course_not_editable_by_editor(data, login, operation):
         CourseEditor(course_id=course.id, membership_id=data["editor_membership"].id)
     )
     db.session.commit()
-    client = login(data["editor"])
+    client = login(data["editor"], company_id=10)
     response = (
         client.get(f"/course/{course.id}/{operation}")
         if operation in ("builder", "edit")
@@ -37,7 +37,7 @@ def test_published_course_not_editable_by_editor(data, login, operation):
 
 
 def test_assigned_editor_edits_but_cannot_publish_or_create(data, login):
-    client = login(data["editor"])
+    client = login(data["editor"], company_id=10)
     course = data["assigned"]
     assert client.get(f"/course/{course.id}/builder").status_code == 200
     assert (
@@ -61,15 +61,20 @@ def test_assigned_editor_edits_but_cannot_publish_or_create(data, login):
 
 
 def test_owner_ids_are_not_company_ids(data, login):
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     course = data["assigned"]
     assert data["owner"].id != course.company_id
     assert client.get(f"/course/{course.id}/builder").status_code == 200
-    assert login(data["other"]).get(f"/course/{course.id}/builder").status_code == 403
+    assert (
+        login(data["other"], company_id=20)
+        .get(f"/course/{course.id}/builder")
+        .status_code
+        == 403
+    )
 
 
 def test_editor_dashboard_does_not_leak_unassigned_courses(data, login):
-    client = login(data["editor"])
+    client = login(data["editor"], company_id=10)
     client.post("/workspaces/select", data={"company_id": 10})
     page = client.get("/account").data
     assert b"Assigned draft" in page
@@ -78,7 +83,7 @@ def test_editor_dashboard_does_not_leak_unassigned_courses(data, login):
 
 
 def test_course_publication_validated(data, login):
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     course = data["assigned"]
     assert publication_errors(course)
     assert client.post(f"/course/{course.id}/publish").status_code == 302
@@ -107,7 +112,7 @@ def test_private_free_plan_preserves_visibility_and_form(data, login):
 
     data["alpha"].plan = "free"
     db.session.commit()
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     client.post("/workspaces/select", data={"company_id": 10})
     course = data["assigned"]
     response = client.post(
@@ -158,7 +163,7 @@ def test_request_course_requires_owner_approval(data, login):
     req = AccessRequest.query.filter_by(course_id=course.id).one()
     assert Enrollment.query.filter_by(course_id=course.id).count() == 0
     assert (
-        login(data["owner"])
+        login(data["owner"], company_id=10)
         .post(f"/course/{course.id}/requests/{req.id}/accept")
         .status_code
         == 302
@@ -170,7 +175,7 @@ def test_preview_creates_no_progress(data, login):
     course = data["published"]
     lesson = course.lessons[0]
     assert (
-        login(data["owner"])
+        login(data["owner"], company_id=10)
         .get(f"/course/{course.id}/preview/lesson/{lesson.id}")
         .status_code
         == 200
@@ -187,7 +192,7 @@ def test_legacy_public_video_blocks_restricted_publication(data):
 
 
 def test_csrf_required(app, data, login):
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     app.config["WTF_CSRF_ENABLED"] = True
     assert (
         client.post(
@@ -201,7 +206,7 @@ def test_published_structure_cannot_break_existing_progress(data, login):
     course = data["published"]
     db.session.add(Enrollment(user_id=data["learner"].id, course_id=course.id))
     db.session.commit()
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     assert (
         client.post(
             f"/course/{course.id}/lessons", data={"title": "New", "text": "text"}
@@ -231,7 +236,7 @@ def test_visible_private_course_does_not_open_lessons_without_access(
 
 def test_owner_sees_private_course_invitation_link(data, login):
     course = data["private"]
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     link = ("/course/private/" + course.invite_token).encode()
     assert link in client.get(f"/course/{course.id}").data
     client.post("/workspaces/select", data={"company_id": 10})
@@ -239,7 +244,7 @@ def test_owner_sees_private_course_invitation_link(data, login):
 
 
 def test_form_has_only_original_public_and_private_choices(data, login):
-    client = login(data["owner"])
+    client = login(data["owner"], company_id=10)
     page = client.get(f"/course/{data['private'].id}/edit").text
     assert 'value="None"' not in page and ">None</textarea>" not in page
     assert 'value="private" checked' in page
@@ -255,7 +260,7 @@ def test_previous_form_choices_normalize_to_visible_private_course(
     from core.questions import LEVELS
 
     course = data["assigned"]
-    response = login(data["owner"]).post(
+    response = login(data["owner"], company_id=10).post(
         f"/course/{course.id}/edit",
         data={
             "title": "Private draft",
