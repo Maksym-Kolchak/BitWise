@@ -1,26 +1,29 @@
 import os
 import secrets
-from datetime import datetime
 
 from flask_login import UserMixin
 
+from core.clock import utc_now
 from database import db
-
 
 # ---------------------------------------------------------------------------
 # Users (existing — kept as is)
 # ---------------------------------------------------------------------------
 
+
 class User(db.Model, UserMixin):
-    """Account. type='person' or 'company' decides which profile is attached."""
+    """A human login. The legacy type column is retained for migration history only."""
+
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.String(20), nullable=False)  # "person" | "company"
     email = db.Column(db.String(255), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     # Magic-login token. Rotated on every successful login so a used link
     # cannot be replayed.
-    login_nonce = db.Column(db.String(32), default=lambda: secrets.token_hex(16), nullable=False)
+    login_nonce = db.Column(
+        db.String(32), default=lambda: secrets.token_hex(16), nullable=False
+    )
 
     # Profile photo / company logo: Cloudinary public_id of the image (None = show initials)
     avatar = db.Column(db.String(255), nullable=True)
@@ -32,7 +35,7 @@ class User(db.Model, UserMixin):
     person = db.relationship(
         "PersonProfile", backref="user", uselist=False, cascade="all, delete-orphan"
     )
-    company = db.relationship(
+    legacy_company = db.relationship(
         "CompanyProfile", backref="user", uselist=False, cascade="all, delete-orphan"
     )
 
@@ -42,22 +45,38 @@ class User(db.Model, UserMixin):
 
     @property
     def is_person(self):
-        return self.type == "person"
+        return True
 
     @property
     def is_company(self):
-        return self.type == "company"
+        return self.company is not None
 
     @property
     def is_pro(self):
         return bool(self.is_company and self.company and self.company.is_pro)
 
     @property
+    def company(self):
+        """Selected workspace, never a source of authorization on its own."""
+        from flask import has_request_context, session
+
+        if not has_request_context():
+            return None
+        company_id = session.get("active_company_id")
+        if not company_id:
+            return None
+        membership = Membership.query.filter_by(
+            user_id=self.id, company_id=company_id
+        ).first()
+        return membership.company if membership else None
+
+    @property
     def display_name(self):
-        if self.is_company and self.company:
-            return self.company.name
         if self.person:
-            return f"{self.person.first_name} {self.person.last_name}"
+            return (
+                f"{self.person.first_name} {self.person.last_name}".strip()
+                or self.email
+            )
         return self.email
 
     @property
@@ -69,7 +88,7 @@ class User(db.Model, UserMixin):
             # demo logos live in frontend/static (database/seed.py), e.g. "static:img/demo/diez.png"
             from flask import url_for
 
-            return url_for("static", filename=self.avatar[len("static:"):])
+            return url_for("static", filename=self.avatar[len("static:") :])
         from backend.uploads import image_url
 
         try:
@@ -79,8 +98,6 @@ class User(db.Model, UserMixin):
 
     @property
     def initials(self):
-        if self.is_company and self.company:
-            return self.company.name[:1].upper()
         if self.person:
             return (self.person.first_name[:1] + self.person.last_name[:1]).upper()
         return self.email[:1].upper()
@@ -99,9 +116,13 @@ class CompanyProfile(db.Model):
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.String(500), nullable=True)
     # Tariff (demo payment, see backend/plans.py): "free" | "per_course" | "monthly"
-    plan = db.Column(db.String(20), default="free", server_default="free", nullable=False)
+    plan = db.Column(
+        db.String(20), default="free", server_default="free", nullable=False
+    )
     # How many courses were bought on the "per_course" plan (the limit is 1 + course_credits)
-    course_credits = db.Column(db.Integer, default=0, server_default="0", nullable=False)
+    course_credits = db.Column(
+        db.Integer, default=0, server_default="0", nullable=False
+    )
 
     @property
     def is_pro(self):
@@ -112,17 +133,19 @@ class CompanyProfile(db.Model):
 class EmailThrottle(db.Model):
     """When we last sent a login / sign-up email to an address.
     Used to make people wait between two emails to the same address."""
+
     key = db.Column(db.String(320), primary_key=True)  # "auth:<email>"
-    sent_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    sent_at = db.Column(db.DateTime, nullable=False, default=utc_now)
 
 
 # ---------------------------------------------------------------------------
 # Courses
 # ---------------------------------------------------------------------------
 
+
 class Course(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
 
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
@@ -130,16 +153,25 @@ class Course(db.Model):
     profession = db.Column(db.String(100), nullable=True)
     outcome = db.Column(db.Text, nullable=True)  # what the learner will be able to do
 
-    level = db.Column(db.String(20), nullable=False)          # key from LEVELS
+    level = db.Column(db.String(20), nullable=False)  # key from LEVELS
     # No longer asked in the course form (kept nullable so old data still loads)
     knowledge_type = db.Column(db.String(30), nullable=True)
     duration = db.Column(db.Integer, nullable=True)
 
+    # Internal compatibility field: public or request (the visible private mode).
+    access_mode = db.Column(
+        db.String(20), default="public", server_default="public", nullable=False
+    )
     is_private = db.Column(db.Boolean, default=False, nullable=False)
     invite_token = db.Column(
-        db.String(64), unique=True, default=lambda: secrets.token_urlsafe(16), nullable=False
+        db.String(64),
+        unique=True,
+        default=lambda: secrets.token_urlsafe(16),
+        nullable=False,
     )
-    status = db.Column(db.String(20), default="draft", nullable=False)  # "draft" | "published"
+    status = db.Column(
+        db.String(20), default="draft", nullable=False
+    )  # "draft" | "published"
     # "en" or "ru": the language the course is written in (found from its texts when it is saved,
     # see Course.update_language). Shown as a chip in the catalog; empty = cannot tell.
     language = db.Column(db.String(5), nullable=True)
@@ -147,13 +179,18 @@ class Course(db.Model):
     # Not used anymore (the studio has no yes/no questions); kept so the table does not change.
     yes_answers = db.Column(db.String(300), default="", nullable=False)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
-    company = db.relationship("User")
+    company = db.relationship("Company")
     lessons = db.relationship(
-        "Lesson", backref="course", order_by="Lesson.order", cascade="all, delete-orphan"
+        "Lesson",
+        backref="course",
+        order_by="Lesson.order",
+        cascade="all, delete-orphan",
     )
-    enrollments = db.relationship("Enrollment", backref="course", cascade="all, delete-orphan")
+    enrollments = db.relationship(
+        "Enrollment", backref="course", cascade="all, delete-orphan"
+    )
     offers = db.relationship("Offer", backref="course", cascade="all, delete-orphan")
     access_requests = db.relationship(
         "AccessRequest", backref="course", cascade="all, delete-orphan"
@@ -166,9 +203,19 @@ class Course(db.Model):
         """Finds the language of the course from its title, description and outcome."""
         from backend.translator import text_language
 
-        self.language = text_language(" ".join(
-            text for text in [self.title, self.description, self.topic, self.profession, self.outcome] if text
-        ))
+        self.language = text_language(
+            " ".join(
+                text
+                for text in [
+                    self.title,
+                    self.description,
+                    self.topic,
+                    self.profession,
+                    self.outcome,
+                ]
+                if text
+            )
+        )
 
     @property
     def lesson_count(self):
@@ -187,12 +234,22 @@ class Lesson(db.Model):
     title = db.Column(db.String(200), nullable=False)
     # Old lessons only: the studio question the lesson was made from (new lessons leave it empty;
     # the master's notes are in AnsweredQuestion now). Still picks quiz ideas for old lessons.
-    question_id = db.Column(db.Integer, nullable=True)  # id from core.questions.QUESTIONS
+    question_id = db.Column(
+        db.Integer, nullable=True
+    )  # id from core.questions.QUESTIONS
 
-    video_filename = db.Column(db.String(255), nullable=True)  # Cloudinary public_id of the video
+    video_delivery = db.Column(
+        db.String(20),
+        default="authenticated",
+        server_default="authenticated",
+        nullable=False,
+    )
+    video_filename = db.Column(
+        db.String(255), nullable=True
+    )  # Cloudinary public_id of the video
     text = db.Column(db.Text, nullable=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     quiz = db.relationship(
         "Quiz", backref="lesson", uselist=False, cascade="all, delete-orphan"
@@ -203,7 +260,7 @@ class Lesson(db.Model):
         """https link for <video src=...>, or None if the lesson has no video."""
         from backend.uploads import video_url
 
-        return video_url(self.video_filename)
+        return video_url(self.video_filename, delivery=self.video_delivery)
 
     def delete_video_file(self, upload_folder=None):
         """Remove this lesson's video from Cloudinary (if any) and clear the field.
@@ -212,17 +269,22 @@ class Lesson(db.Model):
         if self.video_filename:
             from backend.uploads import delete_video
 
-            delete_video(self.video_filename)
+            delete_video(self.video_filename, delivery=self.video_delivery)
             self.video_filename = None
 
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    lesson_id = db.Column(db.Integer, db.ForeignKey("lesson.id"), unique=True, nullable=False)
+    lesson_id = db.Column(
+        db.Integer, db.ForeignKey("lesson.id"), unique=True, nullable=False
+    )
     pass_score = db.Column(db.Integer, default=70, nullable=False)  # percent
 
     questions = db.relationship(
-        "QuizQuestion", backref="quiz", order_by="QuizQuestion.id", cascade="all, delete-orphan"
+        "QuizQuestion",
+        backref="quiz",
+        order_by="QuizQuestion.id",
+        cascade="all, delete-orphan",
     )
     attempts = db.relationship(
         "QuizAttempt", backref="quiz", cascade="all, delete-orphan"
@@ -233,16 +295,23 @@ class QuizQuestion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     quiz_id = db.Column(db.Integer, db.ForeignKey("quiz.id"), nullable=False)
     text = db.Column(db.Text, nullable=False)
-    category = db.Column(db.String(30), nullable=True)  # key from CATEGORIES, source template
+    category = db.Column(
+        db.String(30), nullable=True
+    )  # key from CATEGORIES, source template
 
     answers = db.relationship(
-        "QuizAnswer", backref="question", order_by="QuizAnswer.id", cascade="all, delete-orphan"
+        "QuizAnswer",
+        backref="question",
+        order_by="QuizAnswer.id",
+        cascade="all, delete-orphan",
     )
 
 
 class QuizAnswer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    question_id = db.Column(db.Integer, db.ForeignKey("quiz_question.id"), nullable=False)
+    question_id = db.Column(
+        db.Integer, db.ForeignKey("quiz_question.id"), nullable=False
+    )
     text = db.Column(db.String(300), nullable=False)
     is_correct = db.Column(db.Boolean, default=False, nullable=False)
 
@@ -252,10 +321,14 @@ class Enrollment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
 
-    status = db.Column(db.String(20), default="in_progress", nullable=False)  # in_progress | completed
-    current_lesson = db.Column(db.Integer, default=1, nullable=False)  # order number, unlocked up to
+    status = db.Column(
+        db.String(20), default="in_progress", nullable=False
+    )  # in_progress | completed
+    current_lesson = db.Column(
+        db.Integer, default=1, nullable=False
+    )  # order number, unlocked up to
 
-    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    started_at = db.Column(db.DateTime, default=utc_now)
     completed_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User")
@@ -279,65 +352,176 @@ class QuizAttempt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     quiz_id = db.Column(db.Integer, db.ForeignKey("quiz.id"), nullable=False)
-    score = db.Column(db.Integer, nullable=False)   # percent
+    score = db.Column(db.Integer, nullable=False)  # percent
     passed = db.Column(db.Boolean, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     user = db.relationship("User")
 
 
 class Offer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
 
     text = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
-    company = db.relationship("User", foreign_keys=[company_id])
+    company = db.relationship("Company", foreign_keys=[company_id])
     user = db.relationship("User", foreign_keys=[user_id])
 
 
 class AccessRequest(db.Model):
     """A person asks to join a private course. The company accepts or declines.
     Accepting creates an Enrollment, so the person can start learning."""
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
-    status = db.Column(db.String(20), default="pending", nullable=False)  # pending | accepted | declined
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(
+        db.String(20), default="pending", nullable=False
+    )  # pending | accepted | declined
+    created_at = db.Column(db.DateTime, default=utc_now)
     decided_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User")
 
     __table_args__ = (
-        db.UniqueConstraint("user_id", "course_id", name="uq_access_request_user_course"),
+        db.UniqueConstraint(
+            "user_id", "course_id", name="uq_access_request_user_course"
+        ),
     )
 
 
 class AnsweredQuestion(db.Model):
     """The master's own note in the studio: "I have already answered this question in my course".
     Only the owner of the course sees it; it is not linked to any lesson."""
+
     id = db.Column(db.Integer, primary_key=True)
     course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
-    question_id = db.Column(db.Integer, nullable=False)  # id from core.questions.QUESTIONS
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    question_id = db.Column(
+        db.Integer, nullable=False
+    )  # id from core.questions.QUESTIONS
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     __table_args__ = (
-        db.UniqueConstraint("course_id", "question_id", name="uq_answered_question_course_question"),
+        db.UniqueConstraint(
+            "course_id", "question_id", name="uq_answered_question_course_question"
+        ),
     )
 
 
 class Translation(db.Model):
     """AI translation of a text written by a user (the "Translate" button, backend/translator.py).
     Saved the first time somebody asks, so the next reader gets it at once."""
+
     id = db.Column(db.Integer, primary_key=True)
-    source_hash = db.Column(db.String(64), nullable=False)  # sha256 of the original text
-    language = db.Column(db.String(5), nullable=False)      # language of the translation
+    source_hash = db.Column(
+        db.String(64), nullable=False
+    )  # sha256 of the original text
+    language = db.Column(db.String(5), nullable=False)  # language of the translation
     text = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     __table_args__ = (
-        db.UniqueConstraint("source_hash", "language", name="uq_translation_source_language"),
+        db.UniqueConstraint(
+            "source_hash", "language", name="uq_translation_source_language"
+        ),
     )
+
+
+class Company(db.Model):
+    """Organization independent of the people who work for it."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(500))
+    avatar = db.Column(db.String(255))
+    plan = db.Column(
+        db.String(20), nullable=False, default="free", server_default="free"
+    )
+    course_credits = db.Column(
+        db.Integer, nullable=False, default=0, server_default="0"
+    )
+    owner = db.relationship("User", foreign_keys=[owner_id])
+
+    @property
+    def company(self):
+        # Compatibility with existing display macros and plan helpers.
+        return self
+
+    @property
+    def display_name(self):
+        return self.name
+
+    @property
+    def is_company(self):
+        return True
+
+    @property
+    def email(self):
+        return self.owner.email
+
+    @property
+    def language(self):
+        return self.owner.language
+
+    @property
+    def is_pro(self):
+        return self.plan in ("per_course", "monthly")
+
+    @property
+    def initials(self):
+        return self.name[:1].upper()
+
+    @property
+    def avatar_url(self):
+        if not self.avatar:
+            return None
+        if self.avatar.startswith("static:"):
+            from flask import url_for
+
+            return url_for("static", filename=self.avatar[7:])
+        from backend.uploads import image_url
+
+        try:
+            return image_url(self.avatar)
+        except RuntimeError:
+            return None
+
+
+class Membership(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    company = db.relationship("Company")
+    user = db.relationship("User")
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "user_id", name="uq_membership_company_user"),
+        db.CheckConstraint("role IN ('owner', 'editor')", name="ck_membership_role"),
+    )
+
+
+class CourseEditor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
+    membership_id = db.Column(
+        db.Integer, db.ForeignKey("membership.id"), nullable=False
+    )
+    __table_args__ = (
+        db.UniqueConstraint("course_id", "membership_id", name="uq_course_editor"),
+    )
+
+
+class CompanyInvitation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    company = db.relationship("Company")

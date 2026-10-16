@@ -2,11 +2,7 @@
 <details class="card danger-zone" id="delete-account">
   <summary>{{ _("Delete account") }}</summary>
   <p class="small muted">
-    {% if user.is_company %}
-      {{ _("This deletes your company account, all your courses with their lessons, videos and quizzes, and the progress of everyone who took them. This cannot be undone.") }}
-    {% else %}
-      {{ _("This deletes your account, your course progress, quiz results and job offers. This cannot be undone.") }}
-    {% endif %}
+    <p class="muted">{{ _("Your learning progress and received offers will be deleted. Delete owned companies separately first.") }}</p>
   </p>
   <form method="post" action="{{ url_for('main.delete_account') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

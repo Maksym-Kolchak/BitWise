@@ -8,6 +8,7 @@ core/questions.py and backend/plans.py, and compares them with translations/<lan
 
 Texts used in JS must be in scripts.json (only that file is sent to the browser).
 """
+
 import ast
 import json
 import os
@@ -19,10 +20,14 @@ sys.path.insert(0, ROOT)
 
 # _("text") / _html("text") / _n(count, "one", "many") in templates
 TEMPLATE_TEXT = re.compile(r"""\b_(?:html)?\(\s*(["'])(.*?)\1""", re.S)
-TEMPLATE_PLURAL = re.compile(r"""\b_n\(\s*[^,]+?,\s*(["'])(.*?)\1\s*,\s*(["'])(.*?)\3""", re.S)
+TEMPLATE_PLURAL = re.compile(
+    r"""\b_n\(\s*[^,]+?,\s*(["'])(.*?)\1\s*,\s*(["'])(.*?)\3""", re.S
+)
 # t('text') / tn(count, 'one', 'many') in JS
 SCRIPT_TEXT = re.compile(r"""\bt\(\s*(['"])(.*?)\1""", re.S)
-SCRIPT_PLURAL = re.compile(r"""\btn\(\s*[^,]+?,\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3""", re.S)
+SCRIPT_PLURAL = re.compile(
+    r"""\btn\(\s*[^,]+?,\s*(['"])(.*?)\1\s*,\s*(['"])(.*?)\3""", re.S
+)
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 
@@ -45,7 +50,11 @@ def python_texts(path):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
             continue
         name, args = node.func.id, node.args
-        if name in ("_", "_html", "translate") and args and isinstance(args[0], ast.Constant):
+        if (
+            name in ("_", "_html", "translate")
+            and args
+            and isinstance(args[0], ast.Constant)
+        ):
             found[args[0].value] = "text"
         if name == "_n" and len(args) >= 3 and isinstance(args[1], ast.Constant):
             found[args[1].value] = "plural"
@@ -75,7 +84,20 @@ def site_texts():
         if question["answer_type"] == "media":  # only these are shown on the site
             texts[question["text"]] = "text"
             texts[question["hint"]] = "text"
-    texts["Please log in to continue."] = "text"  # core/__init__.py, login_manager.login_message
+    for label in (
+        "Public",
+        "Private",
+        "Anyone can find and start it.",
+        "Visible in the catalog. Start after approval or with an invite link.",
+        "Pending",
+        "Accepted",
+        "Declined",
+        "Cancelled",
+    ):
+        texts[label] = "text"
+    texts["Please log in to continue."] = (
+        "text"  # core/__init__.py, login_manager.login_message
+    )
     for label in [*CATEGORIES.values(), *LEVELS.values(), *PLAN_LABELS.values()]:
         texts[label] = "text"
     for suggestions in QUIZ_TEMPLATES.values():
@@ -117,8 +139,14 @@ def problems(texts, dictionary, where):
         if kind == "plural" and len(forms) != 3:
             found.append(f"  needs 3 forms (1 / 2 / 5): {text!r}")
         for form in forms:
-            if set(PLACEHOLDER.findall(form)) - set(PLACEHOLDER.findall(text)) - {"count"}:
-                found.append(f"  unknown {{placeholder}} in the translation of {text!r}: {form!r}")
+            if (
+                set(PLACEHOLDER.findall(form))
+                - set(PLACEHOLDER.findall(text))
+                - {"count"}
+            ):
+                found.append(
+                    f"  unknown {{placeholder}} in the translation of {text!r}: {form!r}"
+                )
     return found
 
 
@@ -126,12 +154,18 @@ def main():
     texts, script_texts = site_texts()
     exit_code = 0
     for language in sorted(os.listdir(os.path.join(ROOT, "translations"))):
-        if language.startswith(("_", ".")) or not os.path.isdir(os.path.join(ROOT, "translations", language)):
+        if language.startswith(("_", ".")) or not os.path.isdir(
+            os.path.join(ROOT, "translations", language)
+        ):
             continue  # __pycache__ and other service folders are not languages
         dictionary, scripts = load(language)
-        found = problems(texts, dictionary, "any file") + problems(script_texts, scripts, "scripts.json")
+        found = problems(texts, dictionary, "any file") + problems(
+            script_texts, scripts, "scripts.json"
+        )
         unused = sorted(set(dictionary) - set(texts) - set(script_texts))
-        print(f"[{language}] texts on the site: {len(texts) + len(script_texts)}, problems: {len(found)}")
+        print(
+            f"[{language}] texts on the site: {len(texts) + len(script_texts)}, problems: {len(found)}"
+        )
         if found:
             print("\n".join(found))
         if unused:

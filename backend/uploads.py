@@ -164,6 +164,7 @@ def save_video(file_storage):
         try:
             result = cloudinary.uploader.upload_large(
                 source,
+                type="authenticated",
                 resource_type="video",  # обязательно, иначе Cloudinary сохранит файл как raw
                 asset_folder=CLOUDINARY_FOLDER,  # у тебя Dynamic folders, поэтому asset_folder, а не folder
                 chunk_size=CHUNK_SIZE,
@@ -178,7 +179,7 @@ def save_video(file_storage):
     return result["public_id"]
 
 
-def delete_video(public_id):
+def delete_video(public_id, delivery="authenticated"):
     """Удаляет видео из Cloudinary. Возвращает True, если удалено.
 
     Безопасно вызывать с None, пустым значением или несуществующим видео.
@@ -188,23 +189,27 @@ def delete_video(public_id):
 
     _configure()
     try:
-        result = cloudinary.uploader.destroy(public_id, resource_type="video", invalidate=True)
+        result = cloudinary.uploader.destroy(public_id, resource_type="video", type=delivery, invalidate=True)
     except (CloudinaryError, OSError):
         log.exception("Cloudinary video delete failed")
         return False
     return result.get("result") == "ok"
 
 
-def video_url(public_id):
-    """https-ссылка на видео (mp4) или None, если видео нет."""
+def video_url(public_id, delivery="authenticated"):
+    """Time-limited media URL; issue it only after authorizing the lesson page.
+
+    Legacy public assets cannot be made private by signing a new URL.
+    """
     if not public_id:
         return None
-
     _configure()
-    url, _options = cloudinary.utils.cloudinary_url(
-        public_id, resource_type="video", secure=True, format="mp4"
-    )
-    return url
+    if delivery != "authenticated":
+        url, _options = cloudinary.utils.cloudinary_url(public_id, resource_type="video", secure=True, format="mp4")
+        return url
+    import time
+    return cloudinary.utils.private_download_url(public_id, "mp4", resource_type="video",
+        type="authenticated", expires_at=int(time.time()) + 3600, attachment=False)
 
 
 # ---------- Картинки: фото профиля и логотип компании ----------

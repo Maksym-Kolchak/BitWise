@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}{{ _('Workspaces and invitations') }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">{% endblock %}
+{% block content %}
+<div class="container page">
+  <h1>{{ _('Workspaces and invitations') }}</h1>
+  <p class="muted">{{ _('One account to learn and work with companies.') }}</p>
+  <a class="btn btn-primary" href="{{ url_for('workspaces.create_company') }}">{{ _('Create a company') }}</a>
+  <h2 class="section-title">{{ _('Invitations') }}</h2>
+  <div class="workspace-stack">
+    {% for invitation in invitations %}
+    <section class="card workspace-card">
+      <h2>{{ invitation.company.name }}</h2>
+      <p>{{ _('Editor') }} · {{ invitation.email }} · {{ _('Expires') }} {{ format_date(invitation.expires_at) }}</p>
+      <p class="muted">{{ _('You can edit assigned drafts, but cannot publish courses or view candidate contacts.') }}</p>
+      <form method="post" action="{{ url_for('workspaces.respond', invitation_id=invitation.id) }}" class="workspace-actions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" name="action" value="accept">{{ _('Accept') }}</button>
+        <button class="btn btn-outline" name="action" value="decline">{{ _('Decline') }}</button>
+      </form>
+    </section>
+    {% else %}<p class="muted">{{ _('No pending invitations.') }}</p>{% endfor %}
+  </div>
+  <h2 class="section-title">{{ _('Your companies') }}</h2>
+  <div class="card-grid">
+    {% for member in workspace_memberships %}
+    <section class="card workspace-card">
+      <h2>{{ member.company.name }}</h2>
+      <p>{{ _('Owner') if member.role == 'owner' else _('Editor') }}</p>
+      <form method="post" action="{{ url_for('workspaces.select') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="company_id" value="{{ member.company_id }}">
+        <button class="btn btn-outline">{{ _('Open workspace') }}</button>
+      </form>
+    </section>
+    {% else %}<p class="muted">{{ _('Create a company or accept an invitation to get started.') }}</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -15,7 +15,7 @@
   <div class="card avatar-edit">
     {{ ui.avatar(user, 'avatar-lg') }}
     <div class="avatar-edit-body">
-      <p class="avatar-edit-title">{{ _('Profile photo') if user.is_person else _('Company logo') }}</p>
+      <p class="avatar-edit-title">{{ _('Profile photo') }}</p>
       <form method="post" action="{{ url_for('main.upload_avatar') }}" enctype="multipart/form-data" class="avatar-edit-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="btn btn-outline btn-small avatar-pick">
@@ -38,7 +38,7 @@
     <form method="post" action="{{ url_for('main.edit_profile') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-      {% if user.is_person %}
+
         <div class="field-row">
           <div class="field">
             <label for="first-name">{{ _("First name") }}</label>
@@ -51,18 +51,7 @@
                    value="{{ form.get('last_name', user.person.last_name if user.person else '') }}">
           </div>
         </div>
-      {% else %}
-        <div class="field">
-          <label for="company-name">{{ _("Company name") }}</label>
-          <input id="company-name" type="text" name="company_name" maxlength="120" required
-                 value="{{ form.get('company_name', user.company.name if user.company else '') }}">
-        </div>
-        <div class="field">
-          <label for="description">{{ _("Description") }}</label>
-          <textarea id="description" name="description" rows="4" maxlength="500">{{ form.get('description', (user.company.description or '') if user.company else '') }}</textarea>
-          <p class="field-hint">{{ _("Shown on your public page. Up to 500 characters.") }}</p>
-        </div>
-      {% endif %}
+
 
       <div class="field">
         <label for="email">{{ _("Email") }}</label>

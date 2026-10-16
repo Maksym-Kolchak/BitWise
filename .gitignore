@@ -12,6 +12,9 @@ app.db
 .vscode/
 .pytest_cache/
 *.bak
-*.bak
-*.bak
-*.bak
+
+backups/
+*.db-wal
+*.db-shm
+.coverage
+htmlcov/

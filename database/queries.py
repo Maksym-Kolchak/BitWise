@@ -8,7 +8,7 @@ from backend.i18n import _
 from database import db
 from database.models import (
     AccessRequest,
-    CompanyProfile,
+    Company,
     Course,
     Enrollment,
     Lesson,
@@ -20,7 +20,7 @@ from database.models import (
 
 _SEARCH_COLUMNS = {
     "topic": lambda: Course.topic,
-    "company": lambda: CompanyProfile.name,
+    "company": lambda: Company.name,
     "profession": lambda: Course.profession,
     "result": lambda: Course.outcome,
 }
@@ -28,14 +28,17 @@ _SEARCH_COLUMNS = {
 
 def course_visible_to(course, user):
     """True if `user` (possibly anonymous) is allowed to view `course`."""
-    if not course.is_private and course.status == "published":
+    from backend.access import can_edit_course
+
+    if can_edit_course(course, user):
+        return True
+    if course.status != "published":
+        return False
+    if not course.is_private:
         return True
 
     if not getattr(user, "is_authenticated", False):
         return False
-
-    if course.company_id == user.id:
-        return True
 
     return (
         Enrollment.query.filter_by(user_id=user.id, course_id=course.id).first()
@@ -47,7 +50,7 @@ def search_companies(q, by):
     """
     Companies that have at least one published course (public or private) matching the
     filter. `by` selects which column is matched with ILIKE against `q`:
-    "topic" -> Course.topic, "company" -> CompanyProfile.name,
+    "topic" -> Course.topic, "company" -> Company.name,
     "profession" -> Course.profession, "result" -> Course.outcome.
     An empty `q` returns companies with any public+published course.
     """
@@ -57,9 +60,10 @@ def search_companies(q, by):
 
     query = (
         db.session.query(Course)
-        .join(User, Course.company_id == User.id)
-        .join(CompanyProfile, CompanyProfile.user_id == User.id)
-        .filter(Course.status == "published")  # private courses count too: they are found by request
+        .join(Company, Course.company_id == Company.id)
+        .filter(
+            Course.status == "published"
+        )  # private courses count too: they are found by request
     )
 
     q = (q or "").strip()
@@ -115,20 +119,24 @@ def search_courses(q, by, language=None):
 
     results = []
     for course in query.order_by(Course.created_at.desc()).all():
-        results.append({
-            "type": "course",
-            "id": course.id,
-            "title": course.title,
-            "description": course.description,
-            "level": _(LEVELS.get(course.level, course.level)),  # in the language of the site
-            "lesson_count": course.lesson_count,
-            "language": course.language,  # "en", "ru" or None
-            "is_private": course.is_private,
-            "url": f"/course/{course.id}",
-            "company_id": course.company_id,
-            "company_name": course.company.display_name,
-            "company_url": f"/company/{course.company_id}",
-        })
+        results.append(
+            {
+                "type": "course",
+                "id": course.id,
+                "title": course.title,
+                "description": course.description,
+                "level": _(
+                    LEVELS.get(course.level, course.level)
+                ),  # in the language of the site
+                "lesson_count": course.lesson_count,
+                "language": course.language,  # "en", "ru" or None
+                "is_private": course.is_private,
+                "url": f"/course/{course.id}",
+                "company_id": course.company_id,
+                "company_name": course.company.display_name,
+                "company_url": f"/company/{course.company_id}",
+            }
+        )
     return results
 
 
@@ -142,9 +150,7 @@ def person_dashboard(user):
     completed = sum(1 for e in enrollments if e.status == "completed")
 
     offers = (
-        Offer.query.filter_by(user_id=user.id)
-        .order_by(Offer.created_at.desc())
-        .all()
+        Offer.query.filter_by(user_id=user.id).order_by(Offer.created_at.desc()).all()
     )
 
     # Requests to private courses that are not accepted yet (waiting or declined)
@@ -176,7 +182,11 @@ def company_dashboard(user):
     for course in courses:
         enrolled = len(course.enrollments)
         completed = sum(1 for e in course.enrollments if e.status == "completed")
-        invite_url = f"/course/private/{course.invite_token}" if course.is_private else None
+        invite_url = (
+            f"/course/private/{course.invite_token}"
+            if course.is_private and course.status == "published"
+            else None
+        )
         # People who finished this course, newest first: their emails are shown on the course card
         completers = [
             {
@@ -191,13 +201,15 @@ def company_dashboard(user):
                 reverse=True,
             )
         ]
-        course_rows.append({
-            "course": course,
-            "enrolled": enrolled,
-            "completed": completed,
-            "invite_url": invite_url,
-            "completers": completers,
-        })
+        course_rows.append(
+            {
+                "course": course,
+                "enrolled": enrolled,
+                "completed": completed,
+                "invite_url": invite_url,
+                "completers": completers,
+            }
+        )
 
     candidates = []
     course_ids = [c.id for c in courses]
@@ -219,19 +231,22 @@ def company_dashboard(user):
                 ).first()
                 is not None
             )
-            candidates.append({
-                "user": enrollment.user,
-                "course": enrollment.course,
-                "score": best_score(enrollment.user_id, enrollment.course_id),
-                "completed_at": enrollment.completed_at,
-                "offer_sent": offer_sent,
-            })
+            candidates.append(
+                {
+                    "user": enrollment.user,
+                    "course": enrollment.course,
+                    "score": best_score(enrollment.user_id, enrollment.course_id),
+                    "completed_at": enrollment.completed_at,
+                    "offer_sent": offer_sent,
+                }
+            )
 
     requests = []
     if course_ids:
         requests = (
             AccessRequest.query.filter(
-                AccessRequest.course_id.in_(course_ids), AccessRequest.status == "pending"
+                AccessRequest.course_id.in_(course_ids),
+                AccessRequest.status == "pending",
             )
             .order_by(AccessRequest.created_at)
             .all()

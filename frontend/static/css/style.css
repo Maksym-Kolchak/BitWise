@@ -343,3 +343,26 @@ img, video { max-width: 100%; }
   .site-nav { gap: 6px; }
   .site-nav .btn { padding: 6px 9px; }
 }
+
+/* Workspace controls reuse the existing brand tokens, without a new design system. */
+.workspace-bar { display:flex; gap:16px; align-items:center; flex-wrap:wrap; padding-top:16px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+.workspace-switch { display:flex; gap:10px; align-items:center; flex-wrap:wrap; min-width:0; }
+.workspace-switch select { max-width: min(380px, 100%); min-height:44px; border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px; font:inherit; background:var(--soft); }
+.workspace-note { margin-top:16px; overflow-wrap:anywhere; }
+.workspace-stack { display:grid; gap:16px; margin-top:20px; }
+.workspace-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:12px; }
+.assignment-row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
+.workspace-card { min-width:0; overflow-wrap:anywhere; }
+.workspace-card h2 { font-size:1.15rem; }
+:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+@media(max-width:600px) {
+  .workspace-switch { width:100%; }
+  .workspace-switch label { width:100%; }
+  .workspace-switch select { flex:1; min-width:0; }
+  .workspace-bar > a { font-size:.875rem; }
+  .site-header-inner { flex-wrap:wrap; }
+  .site-nav { flex-wrap:wrap; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}

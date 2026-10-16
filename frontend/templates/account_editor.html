@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}{{ company.name }} · {{ _('Editor') }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">{% endblock %}
+{% block content %}
+<div class="container page">
+  <h1>{{ company.name }}</h1>
+  <p class="muted">{{ _('Editor') }} · {{ _('Only assigned courses are shown. Published courses are read-only.') }}</p>
+  <div class="workspace-stack">
+  {% for course in courses %}
+    <section class="card workspace-card">
+      <h2>{{ course.title }}</h2>
+      <p>{{ _('Draft') if course.status == 'draft' else _('Published') }}</p>
+      {% if course.status == 'draft' %}<a class="btn btn-primary" href="{{ url_for('builder.script', course_id=course.id) }}">{{ _('Edit course') }}</a>
+      {% else %}<p class="muted">{{ _('Only the owner can change published courses.') }}</p>{% endif %}
+    </section>
+  {% else %}<p>{{ _('No courses assigned. Ask the owner to assign a draft to you.') }}</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

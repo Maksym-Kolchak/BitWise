@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}{{ _('Members and course access') }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">{% endblock %}
+{% block content %}
+<div class="container page">
+  <h1>{{ company.name }}</h1>
+  <p>{{ _('Members and course access') }}</p>
+  <section class="card workspace-card">
+    <h2>{{ _('Invite an editor') }}</h2>
+    <p class="muted">{{ _('An invitation gives company membership, not access to every course.') }}</p>
+    <form method="post" action="{{ url_for('workspaces.invite', company_id=company.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field"><label for="invite-email">{{ _('Email') }}</label><input id="invite-email" name="email" type="email" maxlength="255" required></div>
+      <button class="btn btn-primary">{{ _('Send invitation') }}</button>
+    </form>
+  </section>
+  <h2 class="section-title">{{ _('Members') }}</h2>
+  <div class="workspace-stack">
+  {% for member in members %}
+    <section class="card workspace-card">
+      <h2>{{ member.user.display_name }}</h2>
+      <p>{{ member.user.email }} · {{ _('Owner') if member.role == 'owner' else _('Editor') }}</p>
+      {% if member.role == 'editor' %}
+        {% for course in courses %}
+        {% set assigned = (course.id, member.id) in assignments %}
+        <form class="assignment-row" method="post" action="{{ url_for('workspaces.assign', company_id=company.id, course_id=course.id, membership_id=member.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <span>{{ course.title }} · {{ _('Draft') if course.status == 'draft' else _('Published') }}</span>
+          <button class="btn btn-outline btn-small" name="action" value="{{ 'remove' if assigned else 'add' }}">{{ _('Revoke course access') if assigned else _('Assign course') }}</button>
+        </form>
+        {% else %}<p class="muted">{{ _('Create a draft before assigning courses.') }}</p>{% endfor %}
+        <form method="post" action="{{ url_for('workspaces.remove_member', company_id=company.id, membership_id=member.id) }}" class="workspace-actions"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline">{{ _('Remove from company') }}</button></form>
+      {% endif %}
+    </section>
+  {% endfor %}
+  </div>
+  <h2 class="section-title">{{ _('Invitations') }}</h2>
+  <div class="workspace-stack">
+  {% for invitation in invitations %}
+    <section class="card workspace-card">
+      <p>{{ invitation.email }} · {{ _('Expired') if invitation.status == 'pending' and invitation.expires_at <= now else _(invitation.status|capitalize) }}</p>
+      <p class="small muted">{{ _('Expires') }} {{ format_date(invitation.expires_at) }}</p>
+      {% if invitation.status == 'pending' %}
+      <form method="post" action="{{ url_for('workspaces.cancel', company_id=company.id, invitation_id=invitation.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline">{{ _('Cancel invitation') }}</button></form>
+      {% endif %}
+    </section>
+  {% else %}<p class="muted">{{ _('No invitations yet.') }}</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

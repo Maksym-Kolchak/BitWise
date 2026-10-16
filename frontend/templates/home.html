@@ -16,7 +16,7 @@
       <a class="btn btn-primary btn-lg" href="{{ url_for('main.explore') }}">{{ _("Find a course") }}</a>
       {% if not current_user.is_authenticated %}
         <button type="button" class="btn btn-outline btn-lg" data-open-auth>{{ _("Log in or sign up") }}</button>
-      {% elif current_user.is_company %}
+      {% elif active_company and owns_company(active_company.id) %}
         <a class="btn btn-outline btn-lg" href="{{ url_for('courses.new') }}">{{ _("Create a course") }}</a>
       {% else %}
         <a class="btn btn-outline btn-lg" href="{{ url_for('main.account') }}">{{ _("My courses") }}</a>
@@ -35,7 +35,7 @@
   <div class="card company-card">
     <p style="margin-top: 0;">{{ _html("Create a course in minutes: we suggest the questions, your expert answers them on video, and every answer becomes a lesson. People who finish your course appear in your <strong>Candidates</strong>.") }}</p>
     {% if not current_user.is_authenticated %}
-      <button type="button" class="btn btn-primary" data-open-auth>{{ _("Sign up as a company") }}</button>
+      <button type="button" class="btn btn-primary" data-open-auth>{{ _("Create account") }}</button>
     {% endif %}
   </div>
 </div>

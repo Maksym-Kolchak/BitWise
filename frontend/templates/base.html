@@ -51,6 +51,7 @@
             <div class="user-menu-list" data-user-menu hidden>
               <p class="user-menu-name">{{ current_user.display_name }}</p>
               <a href="{{ url_for('main.account') }}">{{ _("My account") }}</a>
+              <a href="{{ url_for('workspaces.index') }}">{{ _("Workspaces and invitations") }}</a>
               <form method="post" action="{{ url_for('auth.logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit">{{ _("Log out") }}</button>
@@ -75,6 +76,22 @@
     {% endif %}
   {% endwith %}
 
+  {% if current_user.is_authenticated %}
+  <div class="container workspace-bar">
+    <form method="post" action="{{ url_for('workspaces.select') }}" class="workspace-switch">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="workspace-select">{{ _("Working in") }}</label>
+      <select id="workspace-select" name="company_id">
+        <option value="" {{ 'selected' if not active_company }}>{{ _("Personal account") }}</option>
+        {% for member in workspace_memberships %}
+        <option value="{{ member.company_id }}" {{ 'selected' if active_company and active_company.id == member.company_id }}>{{ member.company.name }} — {{ _("Owner") if member.role == 'owner' else _("Editor") }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-outline btn-small" type="submit">{{ _("Switch") }}</button>
+    </form>
+    <a href="{{ url_for('workspaces.index') }}">{{ _("Workspaces and invitations") }}</a>
+  </div>
+  {% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>
@@ -94,6 +111,7 @@
       {# Log in: we email a one-time link, no password #}
       <form method="post" action="{{ url_for('auth.login') }}" data-auth-panel="login">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ request.args.get('next') or session.get('after_login') or request.full_path }}">
         <p class="muted small">{{ _("We'll email you a one-time login link. No password needed.") }}</p>
         <div class="field">
           <label for="login-email">{{ _("Email") }}</label>
@@ -102,38 +120,15 @@
         <button type="submit" class="btn btn-primary btn-block">{{ _("Send login link") }}</button>
       </form>
 
-      {# Sign up: person or company #}
+      {# Sign up: one human account; companies are created after login #}
       <form method="post" action="{{ url_for('auth.signup') }}" data-auth-panel="signup" hidden>
+        <input type="hidden" name="next" value="{{ request.args.get('next') or session.get('after_login') or request.full_path }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-        <div class="pill-switch">
-          <label><input type="radio" name="type" value="person" checked data-account-type><span>{{ _("I'm a person") }}</span></label>
-          <label><input type="radio" name="type" value="company" data-account-type><span>{{ _("Company") }}</span></label>
-        </div>
-
-        <div data-person-fields>
-          <div class="field-row">
-            <div class="field">
-              <label for="first-name">{{ _("First name") }}</label>
-              <input id="first-name" type="text" name="first_name" autocomplete="given-name">
-            </div>
-            <div class="field">
-              <label for="last-name">{{ _("Last name") }}</label>
-              <input id="last-name" type="text" name="last_name" autocomplete="family-name">
-            </div>
-          </div>
-        </div>
-
-        <div data-company-fields hidden>
-          <div class="field">
-            <label for="company-name">{{ _("Company name") }}</label>
-            <input id="company-name" type="text" name="company_name" autocomplete="organization">
-          </div>
-          <div class="field">
-            <label for="company-description">{{ _("About the company") }} <span class="muted small">{{ _("(optional)") }}</span></label>
-            <textarea id="company-description" name="description" rows="3" maxlength="500"
-                      placeholder="{{ _('What you do, where you work, who you hire') }}"></textarea>
-          </div>
+        <p class="muted">{{ _("One account to learn and work with companies.") }}</p>
+        <div class="field-row">
+          <div class="field"><label for="first-name">{{ _("First name") }}</label><input id="first-name" name="first_name" maxlength="60" autocomplete="given-name" required></div>
+          <div class="field"><label for="last-name">{{ _("Last name") }}</label><input id="last-name" name="last_name" maxlength="60" autocomplete="family-name" required></div>
         </div>
 
         <div class="field">

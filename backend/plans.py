@@ -34,7 +34,7 @@ def course_limit(company_user):
 
 def courses_used(company_user):
     """How many courses the company has now (drafts included)."""
-    return Course.query.filter_by(company_id=company_user.id).count()
+    return Course.query.filter_by(company_id=company_user.company.id).count()
 
 
 def can_create_course(company_user):

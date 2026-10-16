@@ -3,11 +3,13 @@
 The last send time is kept in the database (table email_throttle), so the pause
 works with several server processes and survives a restart.
 """
-from datetime import datetime, timedelta
+
+from datetime import timedelta
 from math import ceil
 
 from sqlalchemy.exc import IntegrityError
 
+from core.clock import utc_now
 from database import db
 from database.models import EmailThrottle
 
@@ -22,7 +24,7 @@ def claim_email_slot(email, cooldown=COOLDOWN_SECONDS):
     confirmations share one pause, so switching forms does not help.
     """
     key = f"auth:{email.strip().lower()}"
-    now = datetime.utcnow()
+    now = utc_now()
 
     # forget old records so the table does not grow forever
     EmailThrottle.query.filter(EmailThrottle.sent_at < now - timedelta(days=1)).delete()

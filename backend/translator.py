@@ -16,6 +16,7 @@ The page does not send the text itself, only a signed "source" (which object and
 so the route translates only what the site really shows and cannot be used
 as a free translator for any text.
 """
+
 import hashlib
 import json
 import os
@@ -31,7 +32,14 @@ from backend.ai_tips import AiUnavailable, _call_api
 from backend.i18n import _, current_language
 from database import db
 from database.models import (
-    CompanyProfile, Course, Lesson, Offer, QuizAnswer, QuizQuestion, Translation,
+    Company,
+    CompanyProfile,
+    Course,
+    Lesson,
+    Offer,
+    QuizAnswer,
+    QuizQuestion,
+    Translation,
 )
 
 # Which fields of which tables may be translated. Name in the token -> (table, fields)
@@ -40,14 +48,16 @@ TRANSLATABLE = {
     "lesson": (Lesson, {"title", "text"}),
     "quiz_question": (QuizQuestion, {"text"}),
     "quiz_answer": (QuizAnswer, {"text"}),
-    "company": (CompanyProfile, {"description"}),
+    "company": (Company, {"description"}),
     "offer": (Offer, {"text"}),
 }
 KIND_OF_TABLE = {table: kind for kind, (table, _fields) in TRANSLATABLE.items()}
 
 LANGUAGE_NAMES_FOR_AI = {"en": "English", "ru": "Russian"}
-TOKEN_MAX_AGE_SECONDS = 7 * 24 * 3600   # a page left open for a week still works
-MAX_TOKENS_FOR_TRANSLATION = 8000       # a whole page (long lesson text + quiz) in one answer
+TOKEN_MAX_AGE_SECONDS = 7 * 24 * 3600  # a page left open for a week still works
+MAX_TOKENS_FOR_TRANSLATION = (
+    8000  # a whole page (long lesson text + quiz) in one answer
+)
 
 LATIN_LETTER = re.compile(r"[A-Za-z]")
 CYRILLIC_LETTER = re.compile(r"[А-Яа-яЁё]")
@@ -63,8 +73,9 @@ SYSTEM_PROMPT = (
 
 # ---------- which language is a text in ----------
 
+
 def text_language(text):
-    """"ru" when the text has more Russian letters than Latin ones, "en" when the opposite,
+    """ "ru" when the text has more Russian letters than Latin ones, "en" when the opposite,
     None when there are no letters at all (numbers, emoji). Good enough for EN / RU."""
     text = text or ""
     latin = len(LATIN_LETTER.findall(text))
@@ -75,6 +86,7 @@ def text_language(text):
 
 
 # ---------- the button in templates ----------
+
 
 class TranslationOffer:
     """What offer_translation() gives to a template: {{ offer.button }} and {{ offer.box }}.
@@ -142,12 +154,13 @@ def offer_translation(objects, *fields, labels=None):
         f'<div class="translation-inner"><div class="translation-card">'
         f'<p class="translation-note">{escape(note)}</p>'
         f'<div class="translation-text" data-translation-text></div>'
-        f'</div></div></div>'
+        f"</div></div></div>"
     )
     return TranslationOffer(button, box)
 
 
 # ---------- translating ----------
+
 
 def _source_hash(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -157,13 +170,27 @@ def _read_parts(token):
     """Texts behind a signed token. Raises ValueError for a broken or old token."""
     try:
         parts = _serializer().loads(token, max_age=TOKEN_MAX_AGE_SECONDS)
-    except BadSignature as error:          # also covers an expired token
+    except BadSignature as error:  # also covers an expired token
         raise ValueError("bad token") from error
 
+    if not isinstance(parts, list) or len(parts) > 200:
+        raise ValueError("bad source")
     texts = []
-    for kind, object_id, field in parts:
+    for part in parts:
+        if not isinstance(part, (list, tuple)) or len(part) != 3:
+            raise ValueError("bad source")
+        kind, object_id, field = part
+        if (
+            not isinstance(kind, str)
+            or kind not in TRANSLATABLE
+            or not isinstance(object_id, int)
+            or not isinstance(field, str)
+        ):
+            raise ValueError("bad source")
         table, allowed_fields = TRANSLATABLE[kind]
         obj = db.session.get(table, object_id) if field in allowed_fields else None
+        if obj is not None and not _can_translate(obj, field):
+            raise ValueError("source access denied")
         texts.append((getattr(obj, field, None) or "") if obj is not None else "")
     return texts
 
@@ -175,13 +202,13 @@ def _ask_ai(texts, language):
         system,
         "<texts>" + json.dumps(texts, ensure_ascii=False) + "</texts>",
         max_tokens=MAX_TOKENS_FOR_TRANSLATION,
-        quick=True,   # no long "thinking": a translation does not need it and comes much faster
+        quick=True,  # no long "thinking": a translation does not need it and comes much faster
         gemini_model=os.getenv("GEMINI_TRANSLATION_MODEL") or None,
     )
     answer = re.sub(r"^```(?:json)?\s*|\s*```$", "", (answer or "").strip())
     start, end = answer.find("["), answer.rfind("]")
     try:
-        translated = json.loads(answer[start:end + 1]) if start != -1 else None
+        translated = json.loads(answer[start : end + 1]) if start != -1 else None
     except ValueError:
         translated = None
     if not isinstance(translated, list) or len(translated) != len(texts):
@@ -202,19 +229,26 @@ def translate_sources(tokens):
     saved = {
         row.source_hash: row.text
         for row in Translation.query.filter(
-            Translation.language == language, Translation.source_hash.in_(set(hashes.values()))
+            Translation.language == language,
+            Translation.source_hash.in_(set(hashes.values())),
         )
     }
     # not translated yet; the same text twice (e.g. "Yes" in two questions) is translated once
-    missing = list(dict.fromkeys(text for text in all_texts if hashes[text] not in saved))
+    missing = list(
+        dict.fromkeys(text for text in all_texts if hashes[text] not in saved)
+    )
 
     if missing:
         for text, translated in zip(missing, _ask_ai(missing, language)):
             saved[hashes[text]] = translated
-            db.session.add(Translation(source_hash=hashes[text], language=language, text=translated))
+            db.session.add(
+                Translation(
+                    source_hash=hashes[text], language=language, text=translated
+                )
+            )
         try:
             db.session.commit()
-        except IntegrityError:   # somebody else saved the same translation a moment ago
+        except IntegrityError:  # somebody else saved the same translation a moment ago
             db.session.rollback()
 
     return [
@@ -225,3 +259,50 @@ def translate_sources(tokens):
 
 def init_app(app):
     app.jinja_env.globals.update(offer_translation=offer_translation)
+
+
+def _can_translate(obj, field):
+    from flask_login import current_user
+    from backend.access import can_edit_course, owns_company
+    from database.models import Enrollment
+
+    if isinstance(obj, CompanyProfile):
+        # Legacy profiles are not rendered by the new application.
+        return False
+    if isinstance(obj, Offer):
+        return current_user.is_authenticated and (
+            obj.user_id == current_user.id or owns_company(obj.company_id)
+        )
+    if isinstance(obj, Course):
+        from database.queries import course_visible_to
+
+        return (obj.status == "published") or course_visible_to(obj, current_user)
+    if isinstance(obj, (Lesson, QuizQuestion, QuizAnswer)):
+        lesson = (
+            obj
+            if isinstance(obj, Lesson)
+            else (
+                obj.quiz.lesson
+                if isinstance(obj, QuizQuestion)
+                else obj.question.quiz.lesson
+            )
+        )
+        course = lesson.course
+        if can_edit_course(course):
+            return True
+        # Lesson names are public metadata for discoverable published courses.
+        if (
+            isinstance(obj, Lesson)
+            and field == "title"
+            and course.status == "published"
+        ):
+            return True
+        if not current_user.is_authenticated or course.status != "published":
+            return False
+        enrollment = Enrollment.query.filter_by(
+            user_id=current_user.id, course_id=course.id
+        ).first()
+        return bool(enrollment and lesson.order <= enrollment.current_lesson)
+    from database.models import Company
+
+    return isinstance(obj, Company)

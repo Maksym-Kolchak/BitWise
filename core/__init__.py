@@ -32,6 +32,28 @@ def create_app(config_class=Config):
         static_folder=os.path.join(BASE_DIR, "frontend", "static"),
     )
     app.config.from_object(config_class)
+    if not app.config.get("SECRET_KEY"):
+        raise RuntimeError(
+            'Set SECRET_KEY in .env. Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
+    if app.config.get("APP_ENV") == "production" and (
+        not app.config.get("SECRET_KEY")
+        or app.config["SECRET_KEY"] == "dev-change-me-in-production"
+    ):
+        raise RuntimeError("Set a unique SECRET_KEY before production startup.")
+
+    if app.config.get("APP_ENV") == "production":
+        from urllib.parse import urlsplit
+
+        public_url = urlsplit(app.config.get("PUBLIC_URL", ""))
+        if (
+            len(app.config["SECRET_KEY"]) < 32
+            or public_url.scheme != "https"
+            or not public_url.netloc
+        ):
+            raise RuntimeError(
+                "Production needs a SECRET_KEY of at least 32 characters and an HTTPS PUBLIC_URL."
+            )
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -62,12 +84,43 @@ def create_app(config_class=Config):
     app.register_blueprint(courses_bp)
     app.register_blueprint(builder_bp)
     app.register_blueprint(quiz_bp)
+    from backend.routes.workspaces import bp as workspaces_bp
+
+    app.register_blueprint(workspaces_bp)
+
+    @login_manager.unauthorized_handler
+    def require_login():
+        from flask import flash, redirect, request, session, url_for
+        from backend.i18n import safe_next_url
+
+        # Never replay a POST automatically after authentication.
+        target = request.full_path if request.method == "GET" else request.referrer
+        session["after_login"] = safe_next_url(target, url_for("main.account"))
+        flash(translate("Please log in to continue."), "info")
+        return redirect(url_for("main.home", auth="login"))
 
     @app.context_processor
     def inject_globals():
         from datetime import datetime
 
-        return {"now_year": datetime.now().year}
+        from flask_login import current_user
+        from backend.access import owns_company, can_edit_course
+        from database.models import Membership
+
+        memberships = (
+            Membership.query.filter_by(user_id=current_user.id).all()
+            if current_user.is_authenticated
+            else []
+        )
+        return {
+            "now_year": datetime.now().year,
+            "workspace_memberships": memberships,
+            "active_company": (
+                current_user.company if current_user.is_authenticated else None
+            ),
+            "owns_company": owns_company,
+            "can_edit_course": can_edit_course,
+        }
 
     @app.errorhandler(403)
     def forbidden(e):
@@ -87,35 +140,25 @@ def create_app(config_class=Config):
         if app.config.get("TESTING"):
             # Tests use a throw-away in-memory database: no migrations needed.
             db.create_all()
-        else:
-            # The real database is created and updated with migrations (migrations/versions/).
-            # They run automatically on every start, so after `git pull` nobody has to
-            # remember `flask db upgrade` (it still works and does the same thing).
-            from flask_migrate import upgrade
-            from sqlalchemy import inspect
+        # Non-test databases are upgraded explicitly with: flask --app run db upgrade
 
-            try:
-                upgrade()
-            except Exception:  # never stop the site from starting because of this
-                app.logger.exception("Automatic database upgrade failed. Run:  flask db upgrade")
+    @app.errorhandler(409)
+    def conflict(error):
+        return render_template("errors/conflict.html", message=error.description), 409
 
-            tables = inspect(db.engine)
+    @app.after_request
+    def private_response_headers(response):
+        from flask import request
+        from flask_login import current_user
 
-            # A fresh database gets the demo company and demo courses, so there is
-            # something to try right after signing up. Skipped while there are no tables.
-            if tables.has_table("user"):
-                from sqlalchemy.exc import OperationalError
-
-                from database.seed import ensure_demo_data
-
-                try:
-                    ensure_demo_data()
-                except OperationalError:
-                    # models.py has a new column that this app.db does not have yet.
-                    # Skip the demo data so `flask db upgrade` itself can start.
-                    db.session.rollback()
-                    app.logger.warning(
-                        "The database is older than models.py. Run:  flask db upgrade"
-                    )
+        response.headers["Referrer-Policy"] = "same-origin"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        if request.endpoint == "static":
+            return response
+        if current_user.is_authenticated or request.path.startswith(
+            ("/login/", "/signup/confirm/", "/invitations/", "/course/private/")
+        ):
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
 
     return app

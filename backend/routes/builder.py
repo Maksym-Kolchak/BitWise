@@ -13,16 +13,34 @@ and that is not linked to any lesson. Time is only a hint and is never checked.
     builder.toggle_answered  POST /course/<id>/questions/<question_id>/answered
     builder.quiz_edit        GET/POST /course/<id>/lesson/<lesson_id>/quiz/edit
 """
-from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
+
+from flask import (
+    Blueprint,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user, login_required
 
+from backend.access import require_course
 from backend.i18n import _
 from backend.plans import can_add_video, video_limit, videos_used
 from backend.uploads import delete_video, save_video
 from core.course_builder import recommended_questions
 from core.questions import QUESTIONS, QUIZ_TEMPLATES
 from database import db
-from database.models import AnsweredQuestion, Course, Lesson, Quiz, QuizAnswer, QuizQuestion
+from database.models import (
+    AnsweredQuestion,
+    Course,
+    Lesson,
+    Quiz,
+    QuizAnswer,
+    QuizQuestion,
+)
 
 bp = Blueprint("builder", __name__)
 
@@ -33,16 +51,9 @@ GENERAL_QUIZ_SUGGESTIONS = [ideas[0] for ideas in QUIZ_TEMPLATES.values() if ide
 
 # ---------- helpers ----------
 
-def _owned_course_or_abort(course_id):
-    """Course of the current company. Person or someone else's course -> 403, none -> 404."""
-    if not current_user.is_company:
-        abort(403)
-    course = db.session.get(Course, course_id)
-    if course is None:
-        abort(404)
-    if course.company_id != current_user.id:
-        abort(403)
-    return course
+
+def _editable_course_or_abort(course_id):
+    return require_course(course_id)
 
 
 def _lesson_or_abort(course, lesson_id):
@@ -78,7 +89,10 @@ def _video_limit_reached(course):
     if can_add_video(course):
         return False
     flash(
-        _("Your plan allows {count} videos per course. Upgrade to add more.", count=video_limit(course.company)),
+        _(
+            "Your plan allows {count} videos per course. Upgrade to add more.",
+            count=video_limit(course.company),
+        ),
         "error",
     )
     return True
@@ -86,10 +100,11 @@ def _video_limit_reached(course):
 
 # ---------- the studio page ----------
 
+
 @bp.route("/course/<int:course_id>/builder")
 @login_required
 def script(course_id):
-    course = _owned_course_or_abort(course_id)
+    course = _editable_course_or_abort(course_id)
     lessons = course.lessons
     return render_template(
         "builder.html",
@@ -105,10 +120,12 @@ def script(course_id):
 
 # ---------- add / edit / delete a lesson ----------
 
+
 @bp.route("/course/<int:course_id>/lessons", methods=["POST"])
 @login_required
 def add_lesson(course_id):
-    course = _owned_course_or_abort(course_id)
+    course = _editable_course_or_abort(course_id)
+    _require_structure_editable(course)
 
     title = request.form.get("title", "").strip()[:200]
     text = request.form.get("text", "").strip()
@@ -123,7 +140,10 @@ def add_lesson(course_id):
             return _back_to_script(course)
         try:
             filename = save_video(video)
-        except (ValueError, RuntimeError) as error:  # RuntimeError: video storage is not configured
+        except (
+            ValueError,
+            RuntimeError,
+        ) as error:  # RuntimeError: video storage is not configured
             flash(str(error), "error")
             return _back_to_script(course)
 
@@ -138,14 +158,17 @@ def add_lesson(course_id):
     db.session.flush()
     _renumber_lessons(course)
     db.session.commit()
-    flash(_("Lesson {number} added. Now add a quick quiz to it.", number=lesson.order), "success")
+    flash(
+        _("Lesson {number} added. Now add a quick quiz to it.", number=lesson.order),
+        "success",
+    )
     return _back_to_script(course, lesson)
 
 
 @bp.route("/course/<int:course_id>/lessons/<int:lesson_id>", methods=["POST"])
 @login_required
 def edit_lesson(course_id, lesson_id):
-    course = _owned_course_or_abort(course_id)
+    course = _editable_course_or_abort(course_id)
     lesson = _lesson_or_abort(course, lesson_id)
 
     title = request.form.get("title", "").strip()[:200]
@@ -166,17 +189,25 @@ def edit_lesson(course_id, lesson_id):
             flash(str(error), "error")
             return _back_to_script(course, lesson)
 
+    if (
+        course.status == "published"
+        and not text
+        and not (new_filename or lesson.video_filename)
+    ):
+        abort(409, description=_("A published lesson must retain text or video."))
     lesson.title = title
     lesson.text = text or None
     old_filename = None
+    old_delivery = lesson.video_delivery
     if new_filename:
+        lesson.video_delivery = "authenticated"
         old_filename = lesson.video_filename
         lesson.video_filename = new_filename
     db.session.commit()
 
     # the old video is removed only after the new one is really saved in the database
     if old_filename:
-        delete_video(old_filename)
+        delete_video(old_filename, delivery=old_delivery)
     flash(_("Lesson saved."), "success")
     return _back_to_script(course, lesson)
 
@@ -184,33 +215,40 @@ def edit_lesson(course_id, lesson_id):
 @bp.route("/course/<int:course_id>/lessons/<int:lesson_id>/delete", methods=["POST"])
 @login_required
 def delete_lesson(course_id, lesson_id):
-    course = _owned_course_or_abort(course_id)
+    course = _editable_course_or_abort(course_id)
+    _require_structure_editable(course)
     lesson = _lesson_or_abort(course, lesson_id)
 
     video_id = lesson.video_filename
+    video_delivery = lesson.video_delivery
     db.session.delete(lesson)
     db.session.flush()
     _renumber_lessons(course)
     db.session.commit()
 
     if video_id:
-        delete_video(video_id)
+        delete_video(video_id, delivery=video_delivery)
     flash(_("Lesson deleted."), "info")
     return _back_to_script(course)
 
 
 # ---------- the master's notes "I have answered this question" ----------
 
-@bp.route("/course/<int:course_id>/questions/<int:question_id>/answered", methods=["POST"])
+
+@bp.route(
+    "/course/<int:course_id>/questions/<int:question_id>/answered", methods=["POST"]
+)
 @login_required
 def toggle_answered(course_id, question_id):
     """Tick / untick a studio question. studio.js asks for JSON; without JavaScript the form
     sends the master back to the studio."""
-    course = _owned_course_or_abort(course_id)
+    course = _editable_course_or_abort(course_id)
     if question_id not in QUESTIONS_BY_ID:
         abort(404)
 
-    note = AnsweredQuestion.query.filter_by(course_id=course.id, question_id=question_id).first()
+    note = AnsweredQuestion.query.filter_by(
+        course_id=course.id, question_id=question_id
+    ).first()
     if note is None:
         db.session.add(AnsweredQuestion(course_id=course.id, question_id=question_id))
         is_answered = True
@@ -226,10 +264,13 @@ def toggle_answered(course_id, question_id):
 
 # ---------- quiz for one lesson ----------
 
-@bp.route("/course/<int:course_id>/lesson/<int:lesson_id>/quiz/edit", methods=["GET", "POST"])
+
+@bp.route(
+    "/course/<int:course_id>/lesson/<int:lesson_id>/quiz/edit", methods=["GET", "POST"]
+)
 @login_required
 def quiz_edit(course_id, lesson_id):
-    course = _owned_course_or_abort(course_id)
+    course = _editable_course_or_abort(course_id)
     lesson = db.session.get(Lesson, lesson_id)
     if lesson is None or lesson.course_id != course.id:
         abort(404)
@@ -239,13 +280,16 @@ def quiz_edit(course_id, lesson_id):
     category = question["category"] if question else None
 
     if request.method == "POST":
+        _require_structure_editable(course)
         error = _add_quiz_question(lesson, category)
         if error:
             flash(error, "error")
         else:
             db.session.commit()
             flash(_("Question added."), "success")
-        return redirect(url_for("builder.quiz_edit", course_id=course.id, lesson_id=lesson.id))
+        return redirect(
+            url_for("builder.quiz_edit", course_id=course.id, lesson_id=lesson.id)
+        )
 
     return render_template(
         "quiz_edit.html",
@@ -285,5 +329,24 @@ def _add_quiz_question(lesson, category):
     new_question = QuizQuestion(quiz=quiz, text=text, category=category)
     db.session.add(new_question)
     for number, answer_text in filled.items():
-        db.session.add(QuizAnswer(question=new_question, text=answer_text, is_correct=(number == correct)))
+        db.session.add(
+            QuizAnswer(
+                question=new_question, text=answer_text, is_correct=(number == correct)
+            )
+        )
     return None
+
+
+def _require_structure_editable(course):
+    from database.models import Enrollment
+
+    if (
+        course.status == "published"
+        and Enrollment.query.filter_by(course_id=course.id).first()
+    ):
+        abort(
+            409,
+            description=_(
+                "Do not change lesson or quiz structure after learning has started. Create a new course version."
+            ),
+        )

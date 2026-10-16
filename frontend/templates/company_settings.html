@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}{{ _('Company settings') if company else _('Create a company') }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">{% endblock %}
+{% block content %}
+<div class="container page narrow">
+  <h1>{{ _('Company settings') if company else _('Create a company') }}</h1>
+  <p class="muted">{{ _('Creating a profile does not verify that you represent this organization.') }}</p>
+  <form method="post" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field"><label for="company-name">{{ _('Company name') }}</label><input id="company-name" name="name" maxlength="120" required value="{{ request.form.get('name', company.name if company else '') }}"></div>
+    <div class="field"><label for="company-description">{{ _('Description') }}</label><textarea id="company-description" name="description" maxlength="500" rows="4">{{ request.form.get('description', company.description or '' if company else '') }}</textarea></div>
+    <button class="btn btn-primary">{{ _('Save') if company else _('Create a company') }}</button>
+  </form>
+  {% if company %}
+  <section class="card workspace-note">
+    <h2>{{ _('Company logo') }}</h2>
+    {% if company.avatar_url %}<img src="{{ company.avatar_url }}" width="80" height="80" alt="{{ company.name }}">{% endif %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('workspaces.logo', company_id=company.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field"><label for="logo-file">{{ _('Company logo') }}</label><input id="logo-file" type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif" required></div>
+      <button class="btn btn-outline">{{ _('Upload') }}</button>
+    </form>
+    {% if company.avatar %}<form method="post" action="{{ url_for('workspaces.logo', company_id=company.id) }}" class="workspace-actions"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline" name="remove" value="1">{{ _('Remove') }}</button></form>{% endif %}
+  </section>
+  <p><a href="{{ url_for('workspaces.team', company_id=company.id) }}">{{ _('Members and course access') }}</a></p>
+  <details class="card workspace-note"><summary>{{ _('Delete company') }}</summary>
+    <p>{{ _('This permanently deletes company courses, learner progress in those courses and offers. Personal accounts remain.') }}</p>
+    <form method="post" action="{{ url_for('workspaces.delete_company', company_id=company.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field"><label for="confirm-name">{{ _('Type the company name to confirm') }}</label><input id="confirm-name" name="confirm_name" required autocomplete="off"></div>
+      <button class="btn btn-outline">{{ _('Delete company') }}</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

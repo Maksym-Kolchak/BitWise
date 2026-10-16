@@ -9,12 +9,13 @@
 
 {% block content %}
 <div class="container page">
+  <p class="workspace-note">{{ _("Owner") }} · <a href="{{ url_for('workspaces.team', company_id=user.id) }}">{{ _("Members and course access") }}</a> · <a href="{{ url_for('workspaces.settings', company_id=user.id) }}">{{ _("Company settings") }}</a></p>
 
   <div class="profile-head">
     {{ ui.avatar(user, 'avatar-lg') }}
     <div>
       <h1>{{ user.display_name }}</h1>
-      <p class="muted">{{ user.email }} · <a href="{{ url_for('courses.company_profile', company_id=user.id) }}">{{ _("Public page") }}</a> · <a href="{{ url_for('main.edit_profile') }}">{{ _("Edit profile") }}</a></p>
+      <p class="muted">{{ user.email }} · <a href="{{ url_for('courses.company_profile', company_id=user.id) }}">{{ _("Public page") }}</a> · <a href="{{ url_for('workspaces.settings', company_id=user.id) }}">{{ _("Edit profile") }}</a></p>
     </div>
   </div>
 
@@ -71,7 +72,7 @@
 
           <dl class="candidate-facts">
             <div><dt>{{ _("Course") }}</dt><dd>{{ candidate.course.title }}</dd></div>
-            <div><dt>{{ _("Best score") }}</dt><dd>{{ candidate.score }}%</dd></div>
+            <div><dt>{{ _("Best individual quiz score") }}</dt><dd>{{ candidate.score }}%</dd></div>
             <div><dt>{{ _("Completed") }}</dt><dd>{{ format_date(candidate.completed_at) if candidate.completed_at else '—' }}</dd></div>
           </dl>
 
@@ -181,7 +182,7 @@
     </div>
   {% endif %}
 
-  {% include "partials/delete_account.html" %}
+  
 
 </div>
 {% endblock %}

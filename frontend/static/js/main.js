@@ -71,19 +71,6 @@ if (authModal) {
     });
   });
 
-  // Sign up: show name fields for a person, company name for a company
-  const personFields = authModal.querySelector('[data-person-fields]');
-  const companyFields = authModal.querySelector('[data-company-fields]');
-  const companyNameInput = companyFields.querySelector('input');
-
-  authModal.querySelectorAll('[data-account-type]').forEach(function (typeOption) {
-    typeOption.addEventListener('change', function () {
-      const isCompany = typeOption.value === 'company' && typeOption.checked;
-      personFields.hidden = isCompany;
-      companyFields.hidden = !isCompany;
-      companyNameInput.required = isCompany;
-    });
-  });
 }
 
 // ---------- Account menu under the avatar ----------

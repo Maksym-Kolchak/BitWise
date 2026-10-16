@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}{{ _('Preview') }} · {{ lesson.title }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">{% endblock %}
+{% block content %}
+<div class="container page narrow">
+  <a href="{{ url_for('builder.script', course_id=course.id) }}">← {{ course.title }}</a>
+  <p class="workspace-note">{{ _('Author preview. No enrollment, progress or candidate result is created.') }}</p>
+  <h1>{{ lesson.title }}</h1>
+  {% if lesson.video_filename %}<video src="{{ lesson.video_url }}" controls playsinline preload="metadata"></video>{% endif %}
+  {% if lesson.text %}<div class="card keep-lines">{{ lesson.text }}</div>{% endif %}
+  {% if lesson.quiz %}<h2 class="section-title">{{ _('Quiz') }}</h2>{% for question in lesson.quiz.questions %}<section class="card workspace-note"><h3>{{ question.text }}</h3><ul>{% for answer in question.answers %}<li>{{ answer.text }}</li>{% endfor %}</ul></section>{% endfor %}{% endif %}
+</div>
+{% endblock %}

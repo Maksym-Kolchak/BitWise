@@ -1,11 +1,12 @@
 import logging
-from datetime import datetime
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from backend.access import require_course
 from backend.email import send_email
 from backend.i18n import _, use_language
+from core.clock import utc_now
 from database import db
 from database.models import Course, Enrollment, Offer, QuizAttempt, User
 
@@ -15,6 +16,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------- helpers ----------
+
 
 def _load_quiz_context(course_id, n):
     """Checks access and returns (course, enrollment, lesson, quiz).
@@ -31,7 +33,17 @@ def _load_quiz_context(course_id, n):
     enrollment = Enrollment.query.filter_by(
         user_id=current_user.id, course_id=course.id
     ).first()
-    if enrollment is None:
+    if (
+        enrollment is None
+        or course.status != "published"
+        or (
+            course.is_private
+            and any(
+                item.video_filename and item.video_delivery != "authenticated"
+                for item in course.lessons
+            )
+        )
+    ):
         abort(403)
     if n > enrollment.current_lesson:
         abort(403)
@@ -45,6 +57,7 @@ def _load_quiz_context(course_id, n):
 
 
 # ---------- take / submit ----------
+
 
 @bp.route("/course/<int:course_id>/lesson/<int:n>/quiz")
 @login_required
@@ -84,7 +97,9 @@ def submit(course_id, n):
     passed = score >= quiz.pass_score
 
     db.session.add(
-        QuizAttempt(user_id=current_user.id, quiz_id=quiz.id, score=score, passed=passed)
+        QuizAttempt(
+            user_id=current_user.id, quiz_id=quiz.id, score=score, passed=passed
+        )
     )
 
     just_completed = False
@@ -94,7 +109,7 @@ def submit(course_id, n):
             enrollment.current_lesson = n + 1
         if n == course.lesson_count and enrollment.status != "completed":
             enrollment.status = "completed"
-            enrollment.completed_at = datetime.utcnow()
+            enrollment.completed_at = utc_now()
             just_completed = True
 
     db.session.commit()
@@ -106,9 +121,15 @@ def submit(course_id, n):
                 send_email(
                     course.company.email,
                     _("New candidate"),
-                    _("{name} ({email}) has completed your course “{course}”.",
-                      name=current_user.display_name, email=current_user.email, course=course.title)
-                    + "\n" + _("Result of the last quiz: {score}%.", score=score) + "\n",
+                    _(
+                        "{name} ({email}) has completed your course “{course}”.",
+                        name=current_user.display_name,
+                        email=current_user.email,
+                        course=course.title,
+                    )
+                    + "\n"
+                    + _("Result of the last quiz: {score}%.", score=score)
+                    + "\n",
                 )
         except Exception:  # noqa: BLE001
             log.exception("Could not send the completion email")
@@ -125,7 +146,9 @@ def submit(course_id, n):
         pass_score=quiz.pass_score,
         passed=passed,
         results=results,
-        next_url=url_for("courses.lesson", course_id=course.id, n=n + 1) if passed else None,
+        next_url=(
+            url_for("courses.lesson", course_id=course.id, n=n + 1) if passed else None
+        ),
         rewatch_url=url_for("courses.lesson", course_id=course.id, n=n),
         retry_url=url_for("quiz.take", course_id=course.id, n=n),
     )
@@ -133,16 +156,11 @@ def submit(course_id, n):
 
 # ---------- job offer ----------
 
+
 @bp.route("/offer/<int:user_id>/<int:course_id>", methods=["POST"])
 @login_required
 def send_offer(user_id, course_id):
-    if not current_user.is_company:
-        abort(403)
-    course = db.session.get(Course, course_id)
-    if course is None:
-        abort(404)
-    if course.company_id != current_user.id:
-        abort(403)
+    course = require_course(course_id, owner_only=True)
 
     person = db.session.get(User, user_id)
     if person is None or not person.is_person:
@@ -159,11 +177,22 @@ def send_offer(user_id, course_id):
         return redirect(url_for("main.account"))
 
     db.session.add(
-        Offer(company_id=current_user.id, user_id=person.id, course_id=course.id, text=text)
+        Offer(
+            company_id=course.company_id,
+            user_id=person.id,
+            course_id=course.id,
+            text=text,
+        )
     )
     db.session.commit()
 
-    with use_language(person.language):  # the subject is in the learner's language, the text is the company's own
-        send_email(person.email, _("Job offer from {company}", company=current_user.display_name), text)
+    with use_language(
+        person.language
+    ):  # the subject is in the learner's language, the text is the company's own
+        send_email(
+            person.email,
+            _("Job offer from {company}", company=course.company.display_name),
+            text,
+        )
     flash(_("Offer sent to {name}.", name=person.display_name), "success")
     return redirect(url_for("main.account"))

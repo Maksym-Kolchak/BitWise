@@ -33,45 +33,45 @@
     {# ---------- Course details ---------- #}
     <form class="card form-card studio-form" id="course-details" method="post"
           action="{{ url_for('courses.edit', course_id=course.id) if is_editing else url_for('courses.new') }}"
-          {{ 'hidden' if not is_editing }}>
+          {{ 'hidden' if not is_editing and not form }}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <div class="field">
         <label for="title">{{ _("Course title") }}</label>
         <input id="title" name="title" type="text" maxlength="200" required
-               placeholder="{{ _('e.g. Pull a perfect espresso shot') }}" value="{{ course.title if is_editing else '' }}">
+               placeholder="{{ _('e.g. Pull a perfect espresso shot') }}" value="{{ form.get('title', course.title if is_editing else '') }}">
       </div>
 
       <div class="field">
         <label for="description">{{ _("Short description") }}</label>
         <textarea id="description" name="description" rows="2"
-                  placeholder="{{ _('Who is this course for?') }}">{{ course.description if is_editing else '' }}</textarea>
+                  placeholder="{{ _('Who is this course for?') }}">{{ form.get('description', (course.description or '') if is_editing else '') }}</textarea>
       </div>
 
       <div class="form-row">
         <div class="field">
           <label for="topic">{{ _("Topic") }}</label>
           <input id="topic" name="topic" type="text" maxlength="100" placeholder="{{ _('e.g. Coffee') }}"
-                 value="{{ course.topic if is_editing else '' }}">
+                 value="{{ form.get('topic', (course.topic or '') if is_editing else '') }}">
         </div>
         <div class="field">
           <label for="profession">{{ _("Profession") }}</label>
           <input id="profession" name="profession" type="text" maxlength="100" placeholder="{{ _('e.g. Barista') }}"
-                 value="{{ course.profession if is_editing else '' }}">
+                 value="{{ form.get('profession', (course.profession or '') if is_editing else '') }}">
         </div>
       </div>
 
       <div class="field">
         <label for="outcome">{{ _("What will people learn?") }}</label>
         <textarea id="outcome" name="outcome" rows="2"
-                  placeholder="{{ _('After this course you will be able to…') }}">{{ course.outcome if is_editing else '' }}</textarea>
+                  placeholder="{{ _('After this course you will be able to…') }}">{{ form.get('outcome', (course.outcome or '') if is_editing else '') }}</textarea>
       </div>
 
       <div class="field">
         <label>{{ _("Learner level") }}</label>
         <div class="pill-group" data-level-picker>
           {% for level_key, level_name in LEVELS.items() %}
-            {% set is_checked = (course.level == level_key) if is_editing else loop.first %}
+            {% set is_checked = form.get('level', course.level if is_editing else LEVELS|first) == level_key %}
             <label class="pill">
               <input type="radio" name="level" value="{{ level_key }}" {{ 'checked' if is_checked }} required>
               <span>{{ _(level_name) }}</span>
@@ -82,22 +82,15 @@
 
       <div class="field">
         <label>{{ _("Who can see it?") }}</label>
-        {% set is_private = is_editing and course.is_private %}
+        {% set selected = form.get('visibility', ('private' if course.is_private else 'public') if is_editing else 'public') %}
+        {% set visibility = 'public' if selected == 'public' else 'private' %}
         <div class="option-grid">
+          {% for mode, label, description in [('public', 'Public', 'Anyone can find and start it.'), ('private', 'Private', 'Visible in the catalog. Start after approval or with an invite link.')] %}
           <label class="option-card">
-            <input type="radio" name="visibility" value="public" {{ 'checked' if not is_private }}>
-            <span class="option-card-body">
-              <strong>🌍 {{ _("Public") }}</strong>
-              <span class="small muted">{{ _("Anyone can find it in search on Explore.") }}</span>
-            </span>
+            <input type="radio" name="visibility" value="{{ mode }}" {{ 'checked' if visibility == mode }}>
+            <span class="option-card-body"><strong>{{ _(label) }}</strong><span class="small muted">{{ _(description) }}</span></span>
           </label>
-          <label class="option-card">
-            <input type="radio" name="visibility" value="private" {{ 'checked' if is_private }}>
-            <span class="option-card-body">
-              <strong>🔒 {{ _("Private") }}</strong>
-              <span class="small muted">{{ _("Only people with your invite link.") }}</span>
-            </span>
-          </label>
+          {% endfor %}
         </div>
       </div>
 

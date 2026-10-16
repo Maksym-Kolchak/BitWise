@@ -8,6 +8,10 @@
 {% endblock %}
 
 {% block content %}
+<div class="container workspace-note">
+  {% if not user.person %}<p>{{ _("Complete your personal profile before introducing yourself to companies.") }} <a href="{{ url_for('main.edit_profile') }}">{{ _("Edit profile") }}</a></p>{% endif %}
+  <a href="{{ url_for('workspaces.index') }}">{{ _("Workspaces and invitations") }}</a> · <a href="{{ url_for('workspaces.create_company') }}">{{ _("Create a company") }}</a>
+</div>
 <div class="container page">
 
   <div class="profile-head">

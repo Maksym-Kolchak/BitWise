@@ -62,7 +62,7 @@
     <a class="back-link" href="{{ url_for('main.account') }}">← {{ _("My account") }}</a>
     <div class="studio-head">
       <div>
-        <h1 class="studio-title">{{ course.title }}</h1>
+        <h1 class="studio-title">{{ course.title }}</h1><p class="muted">{{ course.company.name }} · {{ _("Owner") if owns_company(course.company_id) else _("Editor") }}</p>
         <div class="chip-row">
           <span class="chip">{{ ui.level_label(course.level) }}</span>
           <span class="chip {{ 'chip-dark' if course.is_private }}">{{ _('Private') if course.is_private else _('Public') }}</span>
@@ -76,7 +76,7 @@
       <div class="studio-actions">
         <a class="btn btn-outline btn-small" href="{{ url_for('courses.edit', course_id=course.id) }}">{{ _("Details") }}</a>
         <a class="btn btn-outline btn-small" href="{{ url_for('courses.view', course_id=course.id) }}">{{ _("Preview") }}</a>
-        {% if course.status == 'draft' %}
+        {% if course.status == 'draft' and owns_company(course.company_id) %}
           <form method="post" action="{{ url_for('courses.publish', course_id=course.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-primary btn-small" {{ 'disabled' if not lessons }}>{{ _("Publish") }}</button>
@@ -93,6 +93,7 @@
     {# ---------- Lessons ---------- #}
     <ol class="studio-lessons">
       {% for lesson in lessons %}
+      <p><a href="{{ url_for('courses.preview_lesson', course_id=course.id, lesson_id=lesson.id) }}">{{ _("Preview") }}: {{ lesson.title }}</a></p>
         {% set quiz_size = lesson.quiz.questions|length if lesson.quiz else 0 %}
         <li class="card studio-lesson" id="lesson-{{ lesson.id }}">
           <div class="studio-lesson-row">

@@ -27,6 +27,13 @@ def database_url():
 
 
 class Config:
+    APP_ENV = os.environ.get("APP_ENV", "development")
+    SESSION_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    REMEMBER_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = APP_ENV == "production"
+    REMEMBER_COOKIE_SECURE = APP_ENV == "production"
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-change-me-in-production")
     SQLALCHEMY_DATABASE_URI = database_url()
     # Check the connection before using it: free Postgres hosts close idle connections
