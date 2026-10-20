@@ -85,5 +85,14 @@
   "Unsupported image format. Allowed formats: png, jpg, webp, gif.": "Неподдерживаемый формат картинки. Можно: png, jpg, webp, gif.",
   "The image file is empty.": "Файл картинки пустой.",
   "The image is too big (max 5 MB).": "Картинка слишком большая (максимум 5 МБ).",
-  "Could not upload the image. Please try again.": "Не удалось загрузить картинку. Попробуйте ещё раз."
+  "Could not upload the image. Please try again.": "Не удалось загрузить картинку. Попробуйте ещё раз.",
+  "A course can have up to {count} materials.": "В курсе может быть не больше {count} материалов.",
+  "Could not upload the PDF. Please try again.": "Не удалось загрузить PDF. Попробуйте ещё раз.",
+  "Material added.": "Материал добавлен.",
+  "Material deleted.": "Материал удалён.",
+  "No PDF file selected.": "PDF-файл не выбран.",
+  "Only PDF files are allowed.": "Можно загружать только PDF-файлы.",
+  "The PDF file is empty.": "PDF-файл пустой.",
+  "The PDF is too big (max {size} MB).": "PDF слишком большой (максимум {size} МБ).",
+  "This file is not a valid PDF.": "Этот файл не является корректным PDF."
 }

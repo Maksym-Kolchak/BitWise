@@ -11,6 +11,8 @@ and that is not linked to any lesson. Time is only a hint and is never checked.
     builder.edit_lesson      POST /course/<id>/lessons/<lesson_id>
     builder.delete_lesson    POST /course/<id>/lessons/<lesson_id>/delete
     builder.toggle_answered  POST /course/<id>/questions/<question_id>/answered
+    builder.add_document     POST /course/<id>/documents
+    builder.delete_document  POST /course/<id>/documents/<document_id>/delete
     builder.quiz_edit        GET/POST /course/<id>/lesson/<lesson_id>/quiz/edit
 """
 
@@ -29,13 +31,14 @@ from flask_login import current_user, login_required
 from backend.access import require_course
 from backend.i18n import _
 from backend.plans import can_add_video, video_limit, videos_used
-from backend.uploads import delete_video, save_video
+from backend.uploads import delete_document, delete_video, save_document, save_video
 from core.course_builder import recommended_questions
 from core.questions import QUESTIONS, QUIZ_TEMPLATES
 from database import db
 from database.models import (
     AnsweredQuestion,
     Course,
+    CourseDocument,
     Lesson,
     Quiz,
     QuizAnswer,
@@ -43,6 +46,8 @@ from database.models import (
 )
 
 bp = Blueprint("builder", __name__)
+
+MAX_DOCUMENTS_PER_COURSE = 10  # a safety cap, not a plan limit
 
 QUESTIONS_BY_ID = {q["id"]: q for q in QUESTIONS}
 # Quiz ideas for a lesson that is not linked to a studio question: the first idea of every topic
@@ -115,6 +120,8 @@ def script(course_id):
         video_limit=video_limit(current_user),
         videos_used=videos_used(course),
         can_add_video=can_add_video(course),
+        documents=course.documents,
+        max_documents=MAX_DOCUMENTS_PER_COURSE,
     )
 
 
@@ -350,3 +357,61 @@ def _require_structure_editable(course):
                 "Do not change lesson or quiz structure after learning has started. Create a new course version."
             ),
         )
+
+
+# ---------- PDF materials of the course ----------
+
+
+@bp.route("/course/<int:course_id>/documents", methods=["POST"])
+@login_required
+def add_document(course_id):
+    course = _editable_course_or_abort(course_id)
+    back = redirect(url_for("builder.script", course_id=course.id) + "#materials")
+    if len(course.documents) >= MAX_DOCUMENTS_PER_COURSE:
+        flash(
+            _(
+                "A course can have up to {count} materials.",
+                count=MAX_DOCUMENTS_PER_COURSE,
+            ),
+            "error",
+        )
+        return back
+    upload = request.files.get("document")
+    title = request.form.get("title", "").strip()[:200]
+    if upload is None or not upload.filename:
+        flash(_("No PDF file selected."), "error")
+        return back
+    if not title:
+        title = upload.filename.rsplit(".", 1)[0].strip()[:200] or upload.filename[:200]
+    try:
+        public_id, size = save_document(upload)
+    except (ValueError, RuntimeError) as error:  # RuntimeError: storage is not configured
+        flash(str(error), "error")
+        return back
+    db.session.add(
+        CourseDocument(
+            course_id=course.id,
+            title=title,
+            public_id=public_id,
+            filename=(upload.filename or "document.pdf")[:255],
+            size_bytes=size,
+        )
+    )
+    db.session.commit()
+    flash(_("Material added."), "success")
+    return back
+
+
+@bp.route("/course/<int:course_id>/documents/<int:document_id>/delete", methods=["POST"])
+@login_required
+def delete_document_route(course_id, document_id):
+    course = _editable_course_or_abort(course_id)
+    document = db.session.get(CourseDocument, document_id)
+    if document is None or document.course_id != course.id:
+        abort(404)
+    public_id = document.public_id
+    db.session.delete(document)
+    db.session.commit()
+    delete_document(public_id)  # the file goes only after the row is really gone
+    flash(_("Material deleted."), "info")
+    return redirect(url_for("builder.script", course_id=course.id) + "#materials")

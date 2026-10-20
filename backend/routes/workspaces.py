@@ -359,13 +359,15 @@ def assign(company_id, course_id, membership_id):
 @bp.route("/companies/<int:company_id>/delete", methods=["POST"])
 @login_required
 def delete_company(company_id):
-    from backend.uploads import delete_image, delete_video
+    from backend.uploads import delete_document, delete_image, delete_video
 
     company = require_company_owner(company_id)
     if request.form.get("confirm_name") != company.name:
         abort(400)
     videos = []
+    documents = []
     for course in Course.query.filter_by(company_id=company.id).all():
+        documents.extend(document.public_id for document in course.documents)
         videos.extend(
             (lesson.video_filename, lesson.video_delivery)
             for lesson in course.lessons
@@ -391,6 +393,8 @@ def delete_company(company_id):
         session.pop("active_company_id", None)
     for public_id, delivery in videos:
         delete_video(public_id, delivery=delivery)
+    for public_id in documents:
+        delete_document(public_id)
     if avatar:
         delete_image(avatar)
     return redirect(url_for("workspaces.index"))

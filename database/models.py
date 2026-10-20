@@ -198,6 +198,12 @@ class Course(db.Model):
     answered_questions = db.relationship(
         "AnsweredQuestion", backref="course", cascade="all, delete-orphan"
     )
+    documents = db.relationship(
+        "CourseDocument",
+        backref="course",
+        order_by="CourseDocument.id",
+        cascade="all, delete-orphan",
+    )
 
     def update_language(self):
         """Finds the language of the course from its title, description and outcome."""
@@ -525,3 +531,15 @@ class CompanyInvitation(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
     expires_at = db.Column(db.DateTime, nullable=False)
     company = db.relationship("Company")
+
+
+class CourseDocument(db.Model):
+    """A PDF material attached to a course (stored in Cloudinary, only the public_id is kept here)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    public_id = db.Column(db.String(300), nullable=False)  # Cloudinary raw public_id (ends with .pdf)
+    filename = db.Column(db.String(255), nullable=False)  # the original file name, for the download
+    size_bytes = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=utc_now)

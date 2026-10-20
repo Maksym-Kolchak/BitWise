@@ -1,0 +1,20 @@
+{# PDF materials of a course. Needs: course, documents, can_open_documents #}
+{% if documents %}
+<section class="course-materials">
+  <h2 class="section-title">{{ _("Materials") }}</h2>
+  {% if can_open_documents %}
+    <ul class="material-list">
+      {% for document in documents %}
+        <li class="material-row">
+          <span class="material-icon" aria-hidden="true">📄</span>
+          <span class="material-name">{{ document.title }}<span class="small muted"> · PDF · {{ (document.size_bytes / 1048576)|round(1) }} MB</span></span>
+          <a class="btn btn-outline btn-small" href="{{ url_for('courses.document', course_id=course.id, document_id=document.id) }}" target="_blank" rel="noopener">{{ _("Open") }}</a>
+          <a class="btn btn-outline btn-small" href="{{ url_for('courses.document', course_id=course.id, document_id=document.id, download=1) }}">{{ _("Download") }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="small muted">🔒 {{ _n(documents|length, "{count} PDF material is available after you start the course.", "{count} PDF materials are available after you start the course.") }}</p>
+  {% endif %}
+</section>
+{% endif %}

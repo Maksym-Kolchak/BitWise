@@ -394,5 +394,21 @@
   "A published lesson must retain text or video.": "В опубликованном уроке должен остаться текст или видео.",
   "Visible in the catalog. Start after approval or with an invite link.": "Виден в каталоге. Обучение — после одобрения заявки или по ссылке-приглашению.",
   "Choosing a workspace opens its dashboard immediately.": "Выбор кабинета сразу открывает его главную страницу.",
-  "Take as a learner": "Пройти как ученик"
+  "Take as a learner": "Пройти как ученик",
+  "Add material": "Добавить материал",
+  "Delete": "Удалить",
+  "Delete this material?": "Удалить этот материал?",
+  "Download": "Скачать",
+  "For example: Safety checklist": "Например: чек-лист по технике безопасности",
+  "Material title": "Название материала",
+  "Materials": "Материалы",
+  "Open": "Открыть",
+  "PDF files for learners: checklists, templates, guides. Learners see them on the course page and can download them.": "PDF-файлы для учеников: чек-листы, шаблоны, инструкции. Ученики видят их на странице курса и могут скачать.",
+  "PDF only, up to 10 MB.": "Только PDF, до 10 МБ.",
+  "{count} PDF material is available after you start the course.": [
+    "После начала курса станет доступен {count} PDF-материал.",
+    "После начала курса станут доступны {count} PDF-материала.",
+    "После начала курса станут доступны {count} PDF-материалов."
+  ],
+  "📄 Choose a PDF": "📄 Выбрать PDF"
 }

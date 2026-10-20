@@ -13,6 +13,7 @@
 """
 import logging
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -278,3 +279,73 @@ def image_url(public_id, size=200):
         width=size, height=size, crop="fill", gravity="auto", fetch_format="auto",
     )
     return url
+
+
+# ---------- PDF-материалы курса ----------
+
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+CLOUDINARY_DOCUMENT_FOLDER = "hackathon-documents"
+
+
+def save_document(file_storage):
+    """Загружает PDF в Cloudinary (raw, authenticated). Возвращает (public_id, размер в байтах).
+
+    Проверяет расширение, размер (до 10 МБ) и начало файла (%PDF-).
+    Бросает ValueError с понятным текстом, RuntimeError если Cloudinary не настроен.
+    """
+    if file_storage is None or not file_storage.filename:
+        raise ValueError(_("No PDF file selected."))
+    if _extension(file_storage.filename) != "pdf":
+        raise ValueError(_("Only PDF files are allowed."))
+
+    stream = file_storage.stream
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(0)
+    if size == 0:
+        raise ValueError(_("The PDF file is empty."))
+    if size > MAX_DOCUMENT_BYTES:
+        raise ValueError(_("The PDF is too big (max {size} MB).", size=MAX_DOCUMENT_BYTES // (1024 * 1024)))
+    if stream.read(5) != b"%PDF-":
+        raise ValueError(_("This file is not a valid PDF."))
+    stream.seek(0)
+
+    _configure()
+    # raw-файлы хранятся с расширением в public_id, поэтому задаём его сами
+    public_id = f"{CLOUDINARY_DOCUMENT_FOLDER}/{secrets.token_urlsafe(16)}.pdf"
+    try:
+        result = cloudinary.uploader.upload(
+            stream,
+            resource_type="raw",
+            type="authenticated",
+            public_id=public_id,
+        )
+    except (CloudinaryError, OSError):
+        log.exception("Cloudinary document upload failed")
+        raise ValueError(_("Could not upload the PDF. Please try again."))
+    return result["public_id"], size
+
+
+def delete_document(public_id):
+    """Удаляет PDF из Cloudinary. Безопасно вызывать с None."""
+    if not public_id:
+        return False
+    _configure()
+    try:
+        result = cloudinary.uploader.destroy(public_id, resource_type="raw", type="authenticated", invalidate=True)
+    except (CloudinaryError, OSError):
+        log.exception("Cloudinary document delete failed")
+        return False
+    return result.get("result") == "ok"
+
+
+def document_url(public_id, download=False):
+    """Короткоживущая подписанная ссылка на PDF; выдавать только после проверки доступа."""
+    if not public_id:
+        return None
+    _configure()
+    import time
+    return cloudinary.utils.private_download_url(
+        public_id, "", resource_type="raw", type="authenticated",
+        expires_at=int(time.time()) + 600, attachment=bool(download),
+    )

@@ -161,7 +161,7 @@ def test_upgrade_intermediate_hidden_courses_keeps_links_and_progress(tmp_path):
             db.session.execute(
                 sa.text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0009"
+            == "0010"
         )
         upgrade(revision="head")
         assert Course.query.count() == 1

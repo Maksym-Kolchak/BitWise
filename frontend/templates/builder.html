@@ -134,6 +134,51 @@
       <p class="side-label">{{ _("Lesson {number}", number=lessons|length + 1) }}</p>
       {{ lesson_form(course) }}
     </div>
+
+    {# ---------- PDF materials ---------- #}
+    <section class="card studio-materials" id="materials">
+      <h2 class="section-title">{{ _("Materials") }}</h2>
+      <p class="field-hint">{{ _("PDF files for learners: checklists, templates, guides. Learners see them on the course page and can download them.") }}</p>
+      {% if documents %}
+        <ul class="material-list">
+          {% for document in documents %}
+            <li class="material-row">
+              <span class="material-icon" aria-hidden="true">📄</span>
+              <span class="material-name">{{ document.title }}<span class="small muted"> · {{ (document.size_bytes / 1048576)|round(1) }} MB</span></span>
+              <a class="btn btn-outline btn-small" href="{{ url_for('courses.document', course_id=course.id, document_id=document.id) }}" target="_blank" rel="noopener">{{ _("Open") }}</a>
+              <form method="post" action="{{ url_for('builder.delete_document_route', course_id=course.id, document_id=document.id) }}"
+                    onsubmit="return confirm({{ _('Delete this material?')|tojson|forceescape }});">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="danger-link">{{ _("Delete") }}</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if documents|length < max_documents %}
+        <form class="material-form" method="post" enctype="multipart/form-data"
+              action="{{ url_for('builder.add_document', course_id=course.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field">
+            <label>{{ _("Material title") }} <span class="muted small">{{ _("(optional)") }}</span></label>
+            <input name="title" type="text" maxlength="200" placeholder="{{ _('For example: Safety checklist') }}">
+          </div>
+          <div class="field">
+            <label class="upload-box">
+              <input type="file" name="document" accept="application/pdf,.pdf" required
+                     onchange="this.nextElementSibling.textContent = this.files.length ? '📄 ' + this.files[0].name : this.nextElementSibling.dataset.empty">
+              <span data-empty="{{ _('📄 Choose a PDF') }}">{{ _("📄 Choose a PDF") }}</span>
+            </label>
+            <p class="field-hint">{{ _("PDF only, up to 10 MB.") }}</p>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ _("Add material") }}</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="field-hint">{{ _("A course can have up to {count} materials.", count=max_documents) }}</p>
+      {% endif %}
+    </section>
   </div>
 
   {# ---------- Side: suggested questions for this course level ---------- #}

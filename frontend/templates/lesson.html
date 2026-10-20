@@ -46,6 +46,9 @@
         <div class="card empty-state"><p class="muted">{{ _("This lesson has no content yet.") }}</p></div>
       {% endif %}
 
+      {% set can_open_documents = true %}
+      {% include "partials/materials.html" %}
+
       <div class="card next-step-card">
         {% if quiz_url %}
           <div>

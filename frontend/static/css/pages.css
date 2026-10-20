@@ -919,3 +919,20 @@ a.lesson-row:hover { border-color: var(--accent); }
 
 /* quiz: the legend floats (see .question-text), so the translation box must start below it */
 .quiz-question .translation { clear: both; }
+
+/* ---------- PDF materials ---------- */
+.course-materials { margin-top: 28px; }
+.studio-materials { margin-top: 24px; display: grid; gap: 14px; }
+.material-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.material-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.material-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.material-row form { margin: 0; }
+.material-form { display: grid; gap: 12px; }

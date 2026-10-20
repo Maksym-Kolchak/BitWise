@@ -20,7 +20,7 @@ from backend.access import (
     publication_errors,
 )
 from backend.plans import can_create_course
-from backend.uploads import delete_video
+from backend.uploads import delete_document, delete_video, document_url
 from backend.email import external_url, send_email
 from backend.i18n import LANGUAGES, _, current_language, use_language
 from backend.ai_tips import AiUnavailable, generate_category_questions
@@ -33,6 +33,7 @@ from database.models import (
     Company,
     CompanyProfile,
     Course,
+    CourseDocument,
     CourseEditor,
     Enrollment,
     User,
@@ -127,6 +128,11 @@ def _render_course(course, invite_token=None):
         access_request = AccessRequest.query.filter_by(
             user_id=current_user.id, course_id=course.id
         ).first()
+    can_manage = can_edit_course(course)
+    # PDF materials: managers and enrolled learners see them, everyone else only sees how many there are
+    can_open_documents = can_manage or (
+        enrollment is not None and course.status == "published"
+    )
     invite_url = None
     if is_owner and course.is_private and course.status == "published":
         invite_url = external_url("courses.private", token=course.invite_token)
@@ -136,7 +142,9 @@ def _render_course(course, invite_token=None):
         lessons=course.lessons,
         enrollment=enrollment,
         is_owner=is_owner,
-        can_manage=can_edit_course(course),
+        can_manage=can_manage,
+        documents=course.documents,
+        can_open_documents=can_open_documents,
         invite_url=invite_url,
         invite_token=invite_token,
         access_request=access_request,
@@ -212,12 +220,15 @@ def delete(course_id):
     video_ids = [
         (lesson.video_filename, lesson.video_delivery) for lesson in course.lessons
     ]
+    document_ids = [document.public_id for document in course.documents]
     CourseEditor.query.filter_by(course_id=course.id).delete()
     db.session.delete(course)
     db.session.commit()
-    # videos are removed only after the course is really gone from the database
+    # files are removed only after the course is really gone from the database
     for public_id, delivery in video_ids:
         delete_video(public_id, delivery=delivery)
+    for public_id in document_ids:
+        delete_document(public_id)
     flash(_("Course deleted."), "info")
     return redirect(url_for("main.account"))
 
@@ -474,7 +485,36 @@ def lesson(course_id, n):
         enrollment=enrollment,
         video_url=video_url,
         quiz_url=quiz_url,
+        documents=course.documents,
     )
+
+
+@bp.route("/course/<int:course_id>/documents/<int:document_id>")
+@login_required
+def document(course_id, document_id):
+    """Authorized PDF download: managers and enrolled learners get a short-lived signed link."""
+    course = db.session.get(Course, course_id)
+    document_obj = db.session.get(CourseDocument, document_id)
+    if course is None or document_obj is None or document_obj.course_id != course.id:
+        abort(404)
+    enrolled = (
+        course.status == "published"
+        and Enrollment.query.filter_by(
+            user_id=current_user.id, course_id=course.id
+        ).first()
+        is not None
+    )
+    if not (can_edit_course(course) or enrolled):
+        abort(403)
+    try:
+        url = document_url(
+            document_obj.public_id, download=request.args.get("download") == "1"
+        )
+    except RuntimeError:
+        abort(503)
+    response = redirect(url)
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @bp.route("/media/<path:filename>")
